@@ -27,7 +27,7 @@ META
 echo "[RX] Starting WiFi Rx baseline..."
 echo "[RX] Working directory: $(pwd)"
 echo "[RX] Metadata: $META_FILE"
-echo "[RX] Raw IQ output configured in wifi_rx.py: data/rx_raw_iq.fc32"
-echo "[RX] Note: current wifi_rx.py still writes to fixed path data/rx_raw_iq.fc32"
+echo "[RX] Raw IQ output: $RAW_IQ_FILE"
+export RX_RAW_IQ_FILE="$RAW_IQ_FILE"
 
 python3 apps/wifi_rx.py
