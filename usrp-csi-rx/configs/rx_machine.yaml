@@ -1,0 +1,20 @@
+role: rx
+project: usrp-csi-rx
+
+device_args: ""
+channels: [0]
+
+freq: 5890000000
+samp_rate: 10000000
+lo_offset: 0
+rx_gain: 0.75
+chan_est: 0
+
+capture:
+  save_raw_iq: true
+  raw_iq_output: "data/rx_raw_iq.fc32"
+  save_metadata: true
+  metadata_dir: "logs"
+
+dataset_stage: "siso_rx_baseline"
+notes: "Rx-only USRP B210 WiFi/CSI sensing baseline"
