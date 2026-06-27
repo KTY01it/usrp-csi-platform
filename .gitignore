@@ -18,6 +18,11 @@ logs/*.log
 data/*
 !data/.gitkeep
 
+usrp-csi-rx/data/*
+!usrp-csi-rx/data/.gitkeep
+usrp-csi-rx/logs/*
+!usrp-csi-rx/logs/.gitkeep
+
 *.dat
 *.bin
 *.c64
