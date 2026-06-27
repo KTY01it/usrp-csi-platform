@@ -19,3 +19,9 @@ A two-machine USRP B210 platform for WiFi-like CSI sensing experiments.
 - Rx baseline is initialized.
 - Tx folder is a placeholder and should be populated from the Tx machine.
 - Data files are ignored by Git.
+
+## Rx quick start
+
+```bash
+cd usrp-csi-rx
+./scripts/run_rx.sh
