@@ -16,7 +16,7 @@ A two-machine USRP B210 platform for WiFi-like CSI sensing experiments.
 
 ## Current stage
 
-- Rx baseline is initialized.
+- Rx raw IQ logging is working.
 - Tx folder is a placeholder and should be populated from the Tx machine.
 - Data files are ignored by Git.
 
@@ -25,3 +25,4 @@ A two-machine USRP B210 platform for WiFi-like CSI sensing experiments.
 ```bash
 cd usrp-csi-rx
 ./scripts/run_rx.sh
+```
