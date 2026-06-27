@@ -88,6 +88,7 @@ class wifi_rx(gr.top_block, Qt.QWidget):
         self.gain = gain = 0.75
         self.freq = freq = 5890000000
         self.chan_est = chan_est = 0
+        self.raw_iq_output = raw_iq_output = 'data/rx_raw_iq.fc32'
 
         ##################################################
         # Blocks
@@ -181,6 +182,12 @@ class wifi_rx(gr.top_block, Qt.QWidget):
 
         self.uhd_usrp_source_0.set_center_freq(uhd.tune_request(freq, rf_freq = freq - lo_offset, rf_freq_policy=uhd.tune_request.POLICY_MANUAL), 0)
         self.uhd_usrp_source_0.set_normalized_gain(gain, 0)
+        self.blocks_file_sink_raw_iq = blocks.file_sink(
+            gr.sizeof_gr_complex*1,
+            raw_iq_output,
+            False
+        )
+        self.blocks_file_sink_raw_iq.set_unbuffered(False)
         self.qtgui_time_sink_x_0 = qtgui.time_sink_f(
             1024, #size
             samp_rate, #samp_rate
@@ -292,6 +299,7 @@ class wifi_rx(gr.top_block, Qt.QWidget):
         ##################################################
         # Connections
         ##################################################
+        self.connect((self.uhd_usrp_source_0, 0), (self.blocks_file_sink_raw_iq, 0))
         self.msg_connect((self.ieee802_11_decode_mac_0, 'out'), (self.ieee802_11_parse_mac_0, 'in'))
         self.msg_connect((self.ieee802_11_frame_equalizer_0, 'symbols'), (self.pdu_pdu_to_tagged_stream_0, 'pdus'))
         self.connect((self.blocks_complex_to_mag_0, 0), (self.blocks_divide_xx_0, 0))
