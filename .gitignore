@@ -32,3 +32,8 @@ Data*/
 Calib/
 .cache/
 .DS_Store
+
+usrp-csi-tx/data/*
+!usrp-csi-tx/data/.gitkeep
+usrp-csi-tx/logs/*
+!usrp-csi-tx/logs/.gitkeep
