@@ -32,6 +32,14 @@ echo "[TX] Metadata: $META_FILE"
 export UHD_IMAGES_DIR="${UHD_IMAGES_DIR:-/usr/share/uhd/images}"
 echo "[TX] UHD_IMAGES_DIR: $UHD_IMAGES_DIR"
 
+echo "[TX] Python: $(which /usr/bin/python3)"
+
+# Avoid conda Python for GNU Radio runtime.
+unset CONDA_PREFIX
+unset CONDA_DEFAULT_ENV
+unset CONDA_SHLVL
+unset PYTHONHOME
+
 # Remove common Snap/VSCode environment variables that can make Python load
 # incompatible /snap/core20 libraries.
 unset LD_LIBRARY_PATH
@@ -46,4 +54,4 @@ unset GSETTINGS_SCHEMA_DIR
 unset QT_PLUGIN_PATH
 unset PYTHONPATH
 
-python3 apps/wifi_tx.py
+/usr/bin/python3 apps/wifi_tx.py
