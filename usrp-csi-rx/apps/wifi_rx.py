@@ -86,7 +86,7 @@ class wifi_rx(gr.top_block, Qt.QWidget):
         self.sync_length = sync_length = 320
         self.samp_rate = samp_rate = 5e6
         self.lo_offset = lo_offset = 0
-        self.gain = gain = 0.5
+        self.gain = gain = 0.75
         self.freq = freq = 5890000000
         self.chan_est = chan_est = 0
         self.raw_iq_output = raw_iq_output = os.environ.get('RX_RAW_IQ_FILE', 'data/rx_raw_iq.fc32')
