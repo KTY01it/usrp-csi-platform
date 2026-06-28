@@ -29,6 +29,8 @@ PYMETA
 echo "[TX] Starting WiFi Tx baseline..."
 echo "[TX] Working directory: $(pwd)"
 echo "[TX] Metadata: $META_FILE"
+export UHD_IMAGES_DIR="${UHD_IMAGES_DIR:-/usr/share/uhd/images}"
+echo "[TX] UHD_IMAGES_DIR: $UHD_IMAGES_DIR"
 
 # Remove common Snap/VSCode environment variables that can make Python load
 # incompatible /snap/core20 libraries.
