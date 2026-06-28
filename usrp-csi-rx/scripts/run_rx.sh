@@ -8,6 +8,7 @@ mkdir -p data logs
 SESSION_TS="$(date +%Y%m%d_%H%M%S)"
 RAW_IQ_FILE="data/rx_raw_iq_${SESSION_TS}.fc32"
 META_FILE="logs/rx_session_${SESSION_TS}.json"
+CONSOLE_LOG="logs/rx_console_${SESSION_TS}.log"
 
 cat > "$META_FILE" <<META
 {
@@ -27,7 +28,8 @@ META
 echo "[RX] Starting WiFi Rx baseline..."
 echo "[RX] Working directory: $(pwd)"
 echo "[RX] Metadata: $META_FILE"
+echo "[RX] Console log: $CONSOLE_LOG"
 echo "[RX] Raw IQ output: $RAW_IQ_FILE"
 export RX_RAW_IQ_FILE="$RAW_IQ_FILE"
 
-python3 apps/wifi_rx.py
+python3 apps/wifi_rx.py 2>&1 | tee "$CONSOLE_LOG"
