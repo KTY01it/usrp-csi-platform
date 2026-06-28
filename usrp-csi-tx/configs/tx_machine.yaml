@@ -5,12 +5,12 @@ device_args: ""
 channels: [0]
 
 freq: 5890000000
-samp_rate: 10000000
+samp_rate: 5000000
 lo_offset: 0
 tx_gain: 0.75
 encoding: 0
-pdu_length: 500
-interval_ms: 300
+pdu_length: 100
+interval_ms: 1000
 
 capture:
   save_metadata: true

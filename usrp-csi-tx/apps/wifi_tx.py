@@ -74,11 +74,11 @@ class wifi_tx(gr.top_block, Qt.QWidget):
         # Variables
         ##################################################
         self.tx_gain = tx_gain = 0.75
-        self.samp_rate = samp_rate = 10e6
-        self.pdu_length = pdu_length = 500
+        self.samp_rate = samp_rate = 5e6
+        self.pdu_length = pdu_length = 100
         self.out_buf_size = out_buf_size = 96000
         self.lo_offset = lo_offset = 0
-        self.interval = interval = 300
+        self.interval = interval = 1000
         self.freq = freq = 5890000000
         self.encoding = encoding = 0
 
