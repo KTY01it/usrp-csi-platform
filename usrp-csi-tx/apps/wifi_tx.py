@@ -73,7 +73,7 @@ class wifi_tx(gr.top_block, Qt.QWidget):
         ##################################################
         # Variables
         ##################################################
-        self.tx_gain = tx_gain = 0.75
+        self.tx_gain = tx_gain = 0.4
         self.samp_rate = samp_rate = 5e6
         self.pdu_length = pdu_length = 100
         self.out_buf_size = out_buf_size = 96000
