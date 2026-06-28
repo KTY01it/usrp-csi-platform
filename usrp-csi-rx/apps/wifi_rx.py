@@ -84,7 +84,7 @@ class wifi_rx(gr.top_block, Qt.QWidget):
         ##################################################
         self.window_size = window_size = 48
         self.sync_length = sync_length = 320
-        self.samp_rate = samp_rate = 10e6
+        self.samp_rate = samp_rate = 5e6
         self.lo_offset = lo_offset = 0
         self.gain = gain = 0.75
         self.freq = freq = 5890000000
