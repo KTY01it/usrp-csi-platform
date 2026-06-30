@@ -17,10 +17,12 @@ meta = {
     "project": "usrp-csi-tx",
     "stage": "siso_tx_baseline",
     "freq": 5890000000,
-    "samp_rate": 10000000,
+    "samp_rate": 5000000,
     "lo_offset": 0,
     "tx_gain": 0.75,
     "channels": [0],
+    "pdu_length": 100,
+    "interval_ms": 1000,
     "created_at": "$SESSION_TS",
 }
 Path("$META_FILE").write_text(json.dumps(meta, indent=2) + "\n")
@@ -29,29 +31,24 @@ PYMETA
 echo "[TX] Starting WiFi Tx baseline..."
 echo "[TX] Working directory: $(pwd)"
 echo "[TX] Metadata: $META_FILE"
+
 export UHD_IMAGES_DIR="${UHD_IMAGES_DIR:-/usr/share/uhd/images}"
 echo "[TX] UHD_IMAGES_DIR: $UHD_IMAGES_DIR"
+echo "[TX] Python: /usr/bin/python3"
 
-echo "[TX] Python: $(which /usr/bin/python3)"
-
-# Avoid conda Python for GNU Radio runtime.
 unset CONDA_PREFIX
 unset CONDA_DEFAULT_ENV
 unset CONDA_SHLVL
 unset PYTHONHOME
-
-# Remove common Snap/VSCode environment variables that can make Python load
-# incompatible /snap/core20 libraries.
-unset LD_LIBRARY_PATH
-unset SNAP
-unset SNAP_NAME
-unset SNAP_ARCH
-unset SNAP_VERSION
-unset SNAP_LIBRARY_PATH
-unset GTK_PATH
-unset GIO_MODULE_DIR
-unset GSETTINGS_SCHEMA_DIR
-unset QT_PLUGIN_PATH
 unset PYTHONPATH
+
+echo "[TX] Checking USRP USB mode..."
+USB_MODE="$(uhd_usrp_probe 2>&1 | grep -i 'Operating over USB' || true)"
+echo "[TX] $USB_MODE"
+
+if ! echo "$USB_MODE" | grep -q "USB 3"; then
+    echo "[TX][ERROR] USRP is not operating over USB 3. Fix cable/port before running Tx."
+    exit 1
+fi
 
 /usr/bin/python3 apps/wifi_tx.py
