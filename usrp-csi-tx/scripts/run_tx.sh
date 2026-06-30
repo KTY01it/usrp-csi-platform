@@ -51,4 +51,18 @@ if ! echo "$USB_MODE" | grep -q "USB 3"; then
     exit 1
 fi
 
-/usr/bin/python3 apps/wifi_tx.py
+env -u LD_LIBRARY_PATH \
+    -u LD_PRELOAD \
+    -u PYTHONPATH \
+    -u PYTHONHOME \
+    -u CONDA_PREFIX \
+    -u CONDA_DEFAULT_ENV \
+    -u CONDA_SHLVL \
+    -u SNAP \
+    -u SNAP_NAME \
+    -u SNAP_INSTANCE_NAME \
+    -u SNAP_REVISION \
+    -u SNAP_ARCH \
+    -u SNAP_VERSION \
+    -u SNAP_COOKIE \
+    /usr/bin/python3 apps/wifi_tx.py
