@@ -429,7 +429,7 @@ class wifi_rx(gr.top_block, Qt.QWidget):
         # self.csi_sink0 = blocks.file_sink(gr.sizeof_gr_complex, "/tmp/Data/csi_ch0.bin")
         
         # KHỞI TẠO ghi về /dev/null để khỏi tạo file rác
-        self.csi_sink0 = blocks.file_sink(gr.sizeof_gr_complex, "/dev/null")
+        self.csi_sink0 = blocks.file_sink(gr.sizeof_gr_complex, os.path.join(os.environ.get("RX_CSI_DIR", "csi"), "csi_ch0.bin"))
 
         # self.msg_csi_dump = blocks.message_debug()  # (tuỳ chọn) in meta ra console
 
@@ -466,7 +466,7 @@ class wifi_rx(gr.top_block, Qt.QWidget):
         # self.csi_sink1 = blocks.file_sink(gr.sizeof_gr_complex, "/tmp/Data/csi_ch1.bin")
         
         # KHỞI TẠO ghi về /dev/null để khỏi tạo file rác
-        self.csi_sink1 = blocks.file_sink(gr.sizeof_gr_complex, "/dev/null")
+        self.csi_sink1 = blocks.file_sink(gr.sizeof_gr_complex, os.path.join(os.environ.get("RX_CSI_DIR", "csi"), "csi_ch1.bin"))
 
         # (tuỳ chọn) xem tag LTF của CH1
         # self.tag_dbg1 = blocks.tag_debug(gr.sizeof_gr_complex*64, "LTF_tag_ch1", ""); self.tag_dbg1.set_display(True)
