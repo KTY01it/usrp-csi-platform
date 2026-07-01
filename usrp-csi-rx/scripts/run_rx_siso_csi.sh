@@ -35,4 +35,7 @@ echo "[RX-CSI] CSI dir: $CSI_DIR"
 export RX_CSI_DIR="$CSI_DIR"
 export RX_CSI_SESSION="$SESSION_TS"
 
+export PYTHONPATH="$(pwd)/tools:$(pwd)/apps:${PYTHONPATH:-}"
+echo "[RX-CSI] PYTHONPATH: $PYTHONPATH"
+
 python3 apps/wifi_rx_siso_csi.py 2>&1 | tee "$CONSOLE_LOG"
