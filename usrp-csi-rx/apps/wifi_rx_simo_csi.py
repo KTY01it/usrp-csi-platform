@@ -177,14 +177,16 @@ class wifi_rx(gr.top_block, Qt.QWidget):
             uhd.stream_args(
                 cpu_format="fc32",
                 args='',
-                channels=list(range(0,1)),
+                channels=[0, 1],
             ),
         )
         self.uhd_usrp_source_0.set_samp_rate(samp_rate)
         self.uhd_usrp_source_0.set_time_unknown_pps(uhd.time_spec(0))
 
         self.uhd_usrp_source_0.set_center_freq(uhd.tune_request(freq, rf_freq = freq - lo_offset, rf_freq_policy=uhd.tune_request.POLICY_MANUAL), 0)
+        self.uhd_usrp_source_0.set_center_freq(uhd.tune_request(freq, rf_freq = freq - lo_offset, rf_freq_policy=uhd.tune_request.POLICY_MANUAL), 1)
         self.uhd_usrp_source_0.set_normalized_gain(gain, 0)
+        self.uhd_usrp_source_0.set_normalized_gain(gain, 1)
         self.blocks_file_sink_raw_iq = blocks.file_sink(
             gr.sizeof_gr_complex*1,
             raw_iq_output,
@@ -312,11 +314,20 @@ class wifi_rx(gr.top_block, Qt.QWidget):
         print("[CSI-MIN] CSI output:", self.csi_bin_path)
 
         ##################################################
+        # SIMO stage-0: consume RX channel 1
+        ##################################################
+        self.blocks_null_sink_ch1 = blocks.null_sink(gr.sizeof_gr_complex)
+        print("[CSI-SIMO-STAGE0] UHD RX channels enabled: [0, 1]")
+        print("[CSI-SIMO-STAGE0] ch0: WiFi decode + CSI")
+        print("[CSI-SIMO-STAGE0] ch1: null sink sanity path")
+
+        ##################################################
         # Connections
         ##################################################
         self.connect((self.fft_vxx_0, 0), (self.csi_est0, 0))
         self.msg_connect((self.csi_est0, 'csi'), (self.pdu2ts0, 'pdus'))
         self.connect((self.pdu2ts0, 0), (self.csi_sink0, 0))
+        self.connect((self.uhd_usrp_source_0, 1), (self.blocks_null_sink_ch1, 0))
         self.connect((self.uhd_usrp_source_0, 0), (self.blocks_file_sink_raw_iq, 0))
         self.msg_connect((self.ieee802_11_decode_mac_0, 'out'), (self.ieee802_11_parse_mac_0, 'in'))
         self.msg_connect((self.ieee802_11_frame_equalizer_0, 'symbols'), (self.pdu_pdu_to_tagged_stream_0, 'pdus'))
@@ -384,6 +395,7 @@ class wifi_rx(gr.top_block, Qt.QWidget):
         self.lo_offset = lo_offset
         self._lo_offset_callback(self.lo_offset)
         self.uhd_usrp_source_0.set_center_freq(uhd.tune_request(self.freq, rf_freq = self.freq - self.lo_offset, rf_freq_policy=uhd.tune_request.POLICY_MANUAL), 0)
+        self.uhd_usrp_source_0.set_center_freq(uhd.tune_request(self.freq, rf_freq = self.freq - self.lo_offset, rf_freq_policy=uhd.tune_request.POLICY_MANUAL), 1)
 
     def get_gain(self):
         return self.gain
@@ -391,6 +403,7 @@ class wifi_rx(gr.top_block, Qt.QWidget):
     def set_gain(self, gain):
         self.gain = gain
         self.uhd_usrp_source_0.set_normalized_gain(self.gain, 0)
+        self.uhd_usrp_source_0.set_normalized_gain(self.gain, 1)
 
     def get_freq(self):
         return self.freq
@@ -400,6 +413,7 @@ class wifi_rx(gr.top_block, Qt.QWidget):
         self._freq_callback(self.freq)
         self.ieee802_11_frame_equalizer_0.set_frequency(self.freq)
         self.uhd_usrp_source_0.set_center_freq(uhd.tune_request(self.freq, rf_freq = self.freq - self.lo_offset, rf_freq_policy=uhd.tune_request.POLICY_MANUAL), 0)
+        self.uhd_usrp_source_0.set_center_freq(uhd.tune_request(self.freq, rf_freq = self.freq - self.lo_offset, rf_freq_policy=uhd.tune_request.POLICY_MANUAL), 1)
 
     def get_chan_est(self):
         return self.chan_est
