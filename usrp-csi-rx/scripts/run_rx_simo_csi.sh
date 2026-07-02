@@ -16,7 +16,7 @@ cat > "$META_FILE" <<META
 {
   "role": "rx",
   "project": "usrp-csi-rx",
-  "stage": "simo_stage0_ch0_csi_ch1_raw_iq",
+  "stage": "simo_stage0_ch0_csi_ch1_null_sink",
   "freq": 5890000000,
   "samp_rate": 5000000,
   "rx_gain": 0.75,
@@ -30,7 +30,7 @@ META
 
 echo "[RX-SIMO-CSI] Starting SIMO stage-0 capture..."
 echo "[RX-SIMO-CSI] ch0 CSI dir: $CSI_DIR"
-echo "[RX-SIMO-CSI] ch1 raw IQ: /dev/null"
+echo "[RX-SIMO-CSI] ch1 path: null sink sanity path"
 echo "[RX-SIMO-CSI] Log: $CONSOLE_LOG"
 
 export RX_CSI_DIR="$CSI_DIR"
