@@ -177,7 +177,7 @@ class wifi_rx(gr.top_block, Qt.QWidget):
             uhd.stream_args(
                 cpu_format="fc32",
                 args='',
-                channels=[0, 1],
+                channels=list(range(0,1)),
             ),
         )
         self.uhd_usrp_source_0.set_samp_rate(samp_rate)
@@ -306,15 +306,10 @@ class wifi_rx(gr.top_block, Qt.QWidget):
         self.csi_dir = os.environ.get("RX_CSI_DIR", "csi")
         os.makedirs(self.csi_dir, exist_ok=True)
         self.csi_bin_path = os.path.join(self.csi_dir, "csi_ch0.bin")
-        self.csi_bin_path1 = os.path.join(self.csi_dir, "csi_ch1.bin")
         self.csi_est0 = csi_ltf_estimator(ltf_tag_keys=("ofdm_start", "wifi_start"))
-        self.csi_est1 = csi_ltf_estimator(ltf_tag_keys=("ofdm_start", "wifi_start"))
         self.csi_sink0 = blocks.file_sink(gr.sizeof_gr_complex, self.csi_bin_path)
-        self.csi_sink1 = blocks.file_sink(gr.sizeof_gr_complex, self.csi_bin_path1)
         self.pdu2ts0 = pdu.pdu_to_tagged_stream(gr.types.complex_t, "packet_len")
-        self.pdu2ts1 = pdu.pdu_to_tagged_stream(gr.types.complex_t, "packet_len")
-        print("[CSI-SIMO] CSI output ch0:", self.csi_bin_path)
-        print("[CSI-SIMO] CSI output ch1:", self.csi_bin_path1)
+        print("[CSI-MIN] CSI output:", self.csi_bin_path)
 
         ##################################################
         # Connections
@@ -322,9 +317,6 @@ class wifi_rx(gr.top_block, Qt.QWidget):
         self.connect((self.fft_vxx_0, 0), (self.csi_est0, 0))
         self.msg_connect((self.csi_est0, 'csi'), (self.pdu2ts0, 'pdus'))
         self.connect((self.pdu2ts0, 0), (self.csi_sink0, 0))
-        self.connect((self.fft_vxx_1, 0), (self.csi_est1, 0))
-        self.msg_connect((self.csi_est1, 'csi'), (self.pdu2ts1, 'pdus'))
-        self.connect((self.pdu2ts1, 0), (self.csi_sink1, 0))
         self.connect((self.uhd_usrp_source_0, 0), (self.blocks_file_sink_raw_iq, 0))
         self.msg_connect((self.ieee802_11_decode_mac_0, 'out'), (self.ieee802_11_parse_mac_0, 'in'))
         self.msg_connect((self.ieee802_11_frame_equalizer_0, 'symbols'), (self.pdu_pdu_to_tagged_stream_0, 'pdus'))
