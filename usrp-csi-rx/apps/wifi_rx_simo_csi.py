@@ -300,6 +300,23 @@ class wifi_rx(gr.top_block, Qt.QWidget):
         self.blocks_complex_to_mag_squared_0 = blocks.complex_to_mag_squared(1)
         self.blocks_complex_to_mag_0 = blocks.complex_to_mag(1)
 
+        ##################################################
+        # SIMO stage-1: channel-1 WiFi sync/FFT/CSI chain
+        ##################################################
+        self.ieee802_11_sync_short_1 = ieee802_11.sync_short(0.56, 2, False, False)
+        self.ieee802_11_sync_long_1 = ieee802_11.sync_long(sync_length, False, False)
+        self.fft_vxx_1 = fft.fft_vcc(64, True, window.rectangular(64), True, 1)
+        self.blocks_stream_to_vector_1 = blocks.stream_to_vector(gr.sizeof_gr_complex*1, 64)
+        self.blocks_multiply_xx_1 = blocks.multiply_vcc(1)
+        self.blocks_moving_average_xx_3 = blocks.moving_average_cc(window_size, 1, 4000, 1)
+        self.blocks_moving_average_xx_2 = blocks.moving_average_ff(window_size + 16, 1, 4000, 1)
+        self.blocks_divide_xx_1 = blocks.divide_ff(1)
+        self.blocks_delay_1_0 = blocks.delay(gr.sizeof_gr_complex*1, 16)
+        self.blocks_delay_1 = blocks.delay(gr.sizeof_gr_complex*1, sync_length)
+        self.blocks_conjugate_cc_1 = blocks.conjugate_cc()
+        self.blocks_complex_to_mag_squared_1 = blocks.complex_to_mag_squared(1)
+        self.blocks_complex_to_mag_1 = blocks.complex_to_mag(1)
+
 
 
         ##################################################
@@ -311,15 +328,20 @@ class wifi_rx(gr.top_block, Qt.QWidget):
         self.csi_est0 = csi_ltf_estimator(ltf_tag_keys=("ofdm_start", "wifi_start"))
         self.csi_sink0 = blocks.file_sink(gr.sizeof_gr_complex, self.csi_bin_path)
         self.pdu2ts0 = pdu.pdu_to_tagged_stream(gr.types.complex_t, "packet_len")
-        print("[CSI-MIN] CSI output:", self.csi_bin_path)
+        self.csi_bin_path1 = os.path.join(self.csi_dir, "csi_ch1.bin")
+        self.csi_est1 = csi_ltf_estimator(ltf_tag_keys=("ofdm_start", "wifi_start"))
+        self.csi_sink1 = blocks.file_sink(gr.sizeof_gr_complex, self.csi_bin_path1)
+        self.pdu2ts1 = pdu.pdu_to_tagged_stream(gr.types.complex_t, "packet_len")
+        print("[CSI-SIMO-STAGE1] CSI output ch0:", self.csi_bin_path)
+        print("[CSI-SIMO-STAGE1] CSI output ch1:", self.csi_bin_path1)
 
         ##################################################
         # SIMO stage-0: consume RX channel 1
         ##################################################
         self.blocks_null_sink_ch1 = blocks.null_sink(gr.sizeof_gr_complex)
-        print("[CSI-SIMO-STAGE0] UHD RX channels enabled: [0, 1]")
-        print("[CSI-SIMO-STAGE0] ch0: WiFi decode + CSI")
-        print("[CSI-SIMO-STAGE0] ch1: null sink sanity path")
+        print("[CSI-SIMO-STAGE1] UHD RX channels enabled: [0, 1]")
+        print("[CSI-SIMO-STAGE1] ch0: WiFi decode + CSI")
+        print("[CSI-SIMO-STAGE1] ch1: full WiFi sync/FFT/CSI path")
 
         ##################################################
         # Connections
@@ -327,7 +349,9 @@ class wifi_rx(gr.top_block, Qt.QWidget):
         self.connect((self.fft_vxx_0, 0), (self.csi_est0, 0))
         self.msg_connect((self.csi_est0, 'csi'), (self.pdu2ts0, 'pdus'))
         self.connect((self.pdu2ts0, 0), (self.csi_sink0, 0))
-        self.connect((self.uhd_usrp_source_0, 1), (self.blocks_null_sink_ch1, 0))
+        self.connect((self.fft_vxx_1, 0), (self.csi_est1, 0))
+        self.msg_connect((self.csi_est1, 'csi'), (self.pdu2ts1, 'pdus'))
+        self.connect((self.pdu2ts1, 0), (self.csi_sink1, 0))
         self.connect((self.uhd_usrp_source_0, 0), (self.blocks_file_sink_raw_iq, 0))
         self.msg_connect((self.ieee802_11_decode_mac_0, 'out'), (self.ieee802_11_parse_mac_0, 'in'))
         self.msg_connect((self.ieee802_11_frame_equalizer_0, 'symbols'), (self.pdu_pdu_to_tagged_stream_0, 'pdus'))
@@ -349,6 +373,28 @@ class wifi_rx(gr.top_block, Qt.QWidget):
         self.connect((self.ieee802_11_sync_long_0, 0), (self.blocks_stream_to_vector_0, 0))
         self.connect((self.ieee802_11_sync_short_0, 0), (self.blocks_delay_0, 0))
         self.connect((self.ieee802_11_sync_short_0, 0), (self.ieee802_11_sync_long_0, 0))
+
+        ##################################################
+        # SIMO stage-1 channel-1 connections
+        ##################################################
+        self.connect((self.uhd_usrp_source_0, 1), (self.blocks_complex_to_mag_squared_1, 0))
+        self.connect((self.uhd_usrp_source_0, 1), (self.blocks_delay_1_0, 0))
+        self.connect((self.uhd_usrp_source_0, 1), (self.blocks_multiply_xx_1, 0))
+        self.connect((self.blocks_complex_to_mag_squared_1, 0), (self.blocks_moving_average_xx_2, 0))
+        self.connect((self.blocks_delay_1_0, 0), (self.blocks_conjugate_cc_1, 0))
+        self.connect((self.blocks_delay_1_0, 0), (self.ieee802_11_sync_short_1, 0))
+        self.connect((self.blocks_conjugate_cc_1, 0), (self.blocks_multiply_xx_1, 1))
+        self.connect((self.blocks_multiply_xx_1, 0), (self.blocks_moving_average_xx_3, 0))
+        self.connect((self.blocks_moving_average_xx_3, 0), (self.blocks_complex_to_mag_1, 0))
+        self.connect((self.blocks_complex_to_mag_1, 0), (self.blocks_divide_xx_1, 0))
+        self.connect((self.blocks_moving_average_xx_2, 0), (self.blocks_divide_xx_1, 1))
+        self.connect((self.blocks_divide_xx_1, 0), (self.ieee802_11_sync_short_1, 2))
+        self.connect((self.blocks_moving_average_xx_3, 0), (self.ieee802_11_sync_short_1, 1))
+        self.connect((self.ieee802_11_sync_short_1, 0), (self.blocks_delay_1, 0))
+        self.connect((self.ieee802_11_sync_short_1, 0), (self.ieee802_11_sync_long_1, 0))
+        self.connect((self.blocks_delay_1, 0), (self.ieee802_11_sync_long_1, 1))
+        self.connect((self.ieee802_11_sync_long_1, 0), (self.blocks_stream_to_vector_1, 0))
+        self.connect((self.blocks_stream_to_vector_1, 0), (self.fft_vxx_1, 0))
         self.connect((self.pdu_pdu_to_tagged_stream_0, 0), (self.qtgui_const_sink_x_0, 0))
         self.connect((self.uhd_usrp_source_0, 0), (self.blocks_complex_to_mag_squared_0, 0))
         self.connect((self.uhd_usrp_source_0, 0), (self.blocks_delay_0_0, 0))
