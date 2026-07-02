@@ -308,7 +308,7 @@ class wifi_rx(gr.top_block, Qt.QWidget):
         self.csi_bin_path = os.path.join(self.csi_dir, "csi_ch0.bin")
         self.csi_est0 = csi_ltf_estimator(ltf_tag_keys=("ofdm_start", "wifi_start"))
         self.csi_sink0 = blocks.file_sink(gr.sizeof_gr_complex, self.csi_bin_path)
-        self.pdu2ts0 = pdu.pdu_to_tagged_stream(pdu.COMPLEX, "packet_len")
+        self.pdu2ts0 = pdu.pdu_to_tagged_stream(gr.types.complex_t, "packet_len")
         print("[CSI-MIN] CSI output:", self.csi_bin_path)
 
         ##################################################
