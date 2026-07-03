@@ -13,4 +13,13 @@ echo "[TX-CH1] Log: $LOG"
 
 export PYTHONPATH="$(pwd)/apps:${PYTHONPATH:-}"
 
-env -u LD_LIBRARY_PATH -u PYTHONHOME PYTHONPATH="$(pwd)/apps:${PYTHONPATH:-}" /usr/bin/python3 apps/wifi_tx_ch1.py 2>&1 | tee "$LOG"
+env -i \
+  HOME="$HOME" \
+  USER="$USER" \
+  LOGNAME="$LOGNAME" \
+  PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin" \
+  DISPLAY="${DISPLAY:-:0}" \
+  XAUTHORITY="${XAUTHORITY:-$HOME/.Xauthority}" \
+  XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/tmp/runtime-$USER}" \
+  PYTHONPATH="$(pwd)/apps" \
+  /usr/bin/python3 apps/wifi_tx_ch1.py 2>&1 | tee "$LOG"
