@@ -13,4 +13,4 @@ echo "[TX-CH1] Log: $LOG"
 
 export PYTHONPATH="$(pwd)/apps:${PYTHONPATH:-}"
 
-python3 apps/wifi_tx_ch1.py 2>&1 | tee "$LOG"
+env -u LD_LIBRARY_PATH -u PYTHONHOME PYTHONPATH="$(pwd)/apps:${PYTHONPATH:-}" /usr/bin/python3 apps/wifi_tx_ch1.py 2>&1 | tee "$LOG"
