@@ -21,7 +21,7 @@ class rx_power_probe(gr.top_block):
                 args="",
                 channels=[0, 1],
             ),
-            "",
+            True,
         )
         self.src.set_samp_rate(self.samp_rate)
         self.src.set_time_unknown_pps(uhd.time_spec(0))
