@@ -197,7 +197,7 @@ class wifi_tx(gr.top_block, Qt.QWidget):
         self.foo_packet_pad2_0.set_min_output_buffer(out_buf_size)
         self.blocks_vector_source_x_0 = blocks.vector_source_c((0,), False, 1, [])
         self.blocks_multiply_const_vxx_0 = blocks.multiply_const_cc(0.6)
-        self.blocks_vector_source_zero_tx0 = blocks.vector_source_c([0j], True)
+        self.blocks_multiply_const_zero_tx0 = blocks.multiply_const_cc(0.0)
         self.blocks_multiply_const_vxx_0.set_min_output_buffer(100000)
         self.blocks_message_strobe_0_0 = blocks.message_strobe(pmt.intern("".join("x" for i in range(pdu_length))), interval)
 
@@ -210,7 +210,8 @@ class wifi_tx(gr.top_block, Qt.QWidget):
         self.msg_connect((self.network_socket_pdu_0, 'pdus'), (self.ieee802_11_mac_0, 'app in'))
         self.connect((self.blocks_multiply_const_vxx_0, 0), (self.foo_packet_pad2_0, 0))
         self.connect((self.blocks_vector_source_x_0, 0), (self.wifi_phy_hier_0, 0))
-        self.connect((self.blocks_vector_source_zero_tx0, 0), (self.uhd_usrp_sink_0, 0))
+        self.connect((self.foo_packet_pad2_0, 0), (self.blocks_multiply_const_zero_tx0, 0))
+        self.connect((self.blocks_multiply_const_zero_tx0, 0), (self.uhd_usrp_sink_0, 0))
         self.connect((self.foo_packet_pad2_0, 0), (self.uhd_usrp_sink_0, 1))
         self.connect((self.wifi_phy_hier_0, 0), (self.blocks_multiply_const_vxx_0, 0))
 
