@@ -73,7 +73,7 @@ class wifi_tx(gr.top_block, Qt.QWidget):
         ##################################################
         # Variables
         ##################################################
-        self.tx_gain = tx_gain = 0.75
+        self.tx_gain = tx_gain = 0.55
         self.samp_rate = samp_rate = 5e6
         self.pdu_length = pdu_length = 100
         self.out_buf_size = out_buf_size = 96000
@@ -86,7 +86,7 @@ class wifi_tx(gr.top_block, Qt.QWidget):
         # Blocks
         ##################################################
 
-        self._tx_gain_range = Range(0, 1, 0.01, 0.75, 200)
+        self._tx_gain_range = Range(0, 1, 0.01, 0.55, 200)
         self._tx_gain_win = RangeWidget(self._tx_gain_range, self.set_tx_gain, "'tx_gain'", "counter_slider", float, QtCore.Qt.Horizontal)
         self.top_layout.addWidget(self._tx_gain_win)
         # Create the options list
