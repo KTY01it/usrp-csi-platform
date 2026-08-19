@@ -63,6 +63,13 @@ class csi_ltf_estimator(gr.sync_block):
         self.corr_thresh = float(corr_thresh)
         self.require_tag = bool(require_tag)
 
+        # Diagnostic: print only the first few FFT-domain tags.
+        self.debug_tags = bool(
+            int(os.environ.get("CSI_DEBUG_TAGS", "0"))
+        )
+        self.debug_tag_count = 0
+        self.debug_tag_limit = 80
+
         # Chống “mưa CSI”
         self.cooldown_syms = 160      # ~ mỗi khung 1 CSI
         self.cooldown = 0
@@ -210,6 +217,37 @@ class csi_ltf_estimator(gr.sync_block):
                 self.prev_vec = v.copy()
                 self.sym_idx += 1
                 continue
+
+            # Diagnostic: inspect tags exactly at this FFT vector.
+            if self.debug_tags and self.debug_tag_count < self.debug_tag_limit:
+                abs_start_dbg = self.nitems_read(0)
+                dbg_tags = self.get_tags_in_range(
+                    0,
+                    abs_start_dbg + rel_idx,
+                    abs_start_dbg + rel_idx + 1,
+                )
+
+                for dbg_tag in dbg_tags:
+                    try:
+                        dbg_key = pmt.symbol_to_string(dbg_tag.key)
+                    except Exception:
+                        dbg_key = str(dbg_tag.key)
+
+                    amp_mean = float(np.mean(np.abs(v)))
+                    amp_max = float(np.max(np.abs(v)))
+
+                    print(
+                        "[CSI-TAG] "
+                        f"rx={self.rx_chan_id} "
+                        f"sym={self.sym_idx} "
+                        f"rel={rel_idx} "
+                        f"key={dbg_key} "
+                        f"offset={int(dbg_tag.offset)} "
+                        f"mean_abs={amp_mean:.6f} "
+                        f"max_abs={amp_max:.6f}"
+                    )
+
+                    self.debug_tag_count += 1
 
             # 2) Phát hiện LTF (ưu tiên tag; tương quan chỉ dự phòng)
             by_tag, tag = self._has_ltf_tag(rel_idx)
