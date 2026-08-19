@@ -56,9 +56,7 @@ class tdm_packet_router(gr.sync_block):
         #
         # Get every input tag in this scheduler window.
         #
-        tags = []
-        self.get_tags_in_range(
-            tags,
+        tags = self.get_tags_in_range(
             0,
             abs_start,
             abs_end,
