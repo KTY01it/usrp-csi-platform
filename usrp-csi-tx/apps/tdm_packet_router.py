@@ -36,6 +36,12 @@ class tdm_packet_router(gr.sync_block):
         # We copy tags ourselves to both outputs.
         self.set_tag_propagation_policy(gr.TPP_DONT)
 
+        # Reduce Python scheduler overhead.
+        # At 5 MS/s, small scheduler calls can starve UHD.
+        self.set_output_multiple(65536)
+
+        self.debug_limit = 20
+
     def work(self, input_items, output_items):
         x = input_items[0]
         tx0 = output_items[0]
@@ -96,10 +102,14 @@ class tdm_packet_router(gr.sync_block):
             slot = self.packet_index & 1
             cycle = self.packet_index // 2
 
-            print(
-                f"[TDM-ROUTER] packet={self.packet_index} "
-                f"cycle={cycle} slot=TX{slot}"
-            )
+            if (
+                self.packet_index < self.debug_limit
+                or self.packet_index % 100 == 0
+            ):
+                print(
+                    f"[TDM-ROUTER] packet={self.packet_index} "
+                    f"cycle={cycle} slot=TX{slot}"
+                )
 
             #
             # Add explicit TDM metadata to BOTH output streams.
