@@ -290,6 +290,32 @@ class wifi_rx(gr.top_block, Qt.QWidget):
         self.ieee802_11_decode_mac_0 = ieee802_11.decode_mac(True, False)
         self.fft_vxx_0 = fft.fft_vcc(64, True, window.rectangular(64), True, 1)
         self.blocks_stream_to_vector_0 = blocks.stream_to_vector(gr.sizeof_gr_complex*1, 64)
+
+        # Optional tag diagnostics.
+        self.debug_pipeline_tags = bool(
+            int(os.environ.get("CSI_DEBUG_PIPELINE_TAGS", "0"))
+        )
+
+        if self.debug_pipeline_tags:
+            self.tagdbg_sync0 = blocks.tag_debug(
+                gr.sizeof_gr_complex,
+                "TAG-SYNC0",
+                ""
+            )
+            self.tagdbg_vec0 = blocks.tag_debug(
+                gr.sizeof_gr_complex * 64,
+                "TAG-VEC0",
+                ""
+            )
+            self.tagdbg_fft0 = blocks.tag_debug(
+                gr.sizeof_gr_complex * 64,
+                "TAG-FFT0",
+                ""
+            )
+
+            self.tagdbg_sync0.set_display(True)
+            self.tagdbg_vec0.set_display(True)
+            self.tagdbg_fft0.set_display(True)
         self.blocks_multiply_xx_0 = blocks.multiply_vcc(1)
         self.blocks_moving_average_xx_1 = blocks.moving_average_cc(window_size, 1, 4000, 1)
         self.blocks_moving_average_xx_0 = blocks.moving_average_ff(window_size  + 16, 1, 4000, 1)
@@ -307,6 +333,27 @@ class wifi_rx(gr.top_block, Qt.QWidget):
         self.ieee802_11_sync_long_1 = ieee802_11.sync_long(sync_length, False, False)
         self.fft_vxx_1 = fft.fft_vcc(64, True, window.rectangular(64), True, 1)
         self.blocks_stream_to_vector_1 = blocks.stream_to_vector(gr.sizeof_gr_complex*1, 64)
+
+        if self.debug_pipeline_tags:
+            self.tagdbg_sync1 = blocks.tag_debug(
+                gr.sizeof_gr_complex,
+                "TAG-SYNC1",
+                ""
+            )
+            self.tagdbg_vec1 = blocks.tag_debug(
+                gr.sizeof_gr_complex * 64,
+                "TAG-VEC1",
+                ""
+            )
+            self.tagdbg_fft1 = blocks.tag_debug(
+                gr.sizeof_gr_complex * 64,
+                "TAG-FFT1",
+                ""
+            )
+
+            self.tagdbg_sync1.set_display(True)
+            self.tagdbg_vec1.set_display(True)
+            self.tagdbg_fft1.set_display(True)
         self.blocks_multiply_xx_1 = blocks.multiply_vcc(1)
         self.blocks_moving_average_xx_3 = blocks.moving_average_cc(window_size, 1, 4000, 1)
         self.blocks_moving_average_xx_2 = blocks.moving_average_ff(window_size + 16, 1, 4000, 1)
@@ -409,6 +456,36 @@ class wifi_rx(gr.top_block, Qt.QWidget):
         self.connect((self.uhd_usrp_source_0, 0), (self.blocks_complex_to_mag_squared_0, 0))
         self.connect((self.uhd_usrp_source_0, 0), (self.blocks_delay_0_0, 0))
         self.connect((self.uhd_usrp_source_0, 0), (self.blocks_multiply_xx_0, 0))
+
+        # Diagnostic fan-outs only. They do not alter the normal RX path.
+        if self.debug_pipeline_tags:
+            self.connect(
+                (self.ieee802_11_sync_long_0, 0),
+                (self.tagdbg_sync0, 0)
+            )
+            self.connect(
+                (self.blocks_stream_to_vector_0, 0),
+                (self.tagdbg_vec0, 0)
+            )
+            self.connect(
+                (self.fft_vxx_0, 0),
+                (self.tagdbg_fft0, 0)
+            )
+
+            self.connect(
+                (self.ieee802_11_sync_long_1, 0),
+                (self.tagdbg_sync1, 0)
+            )
+            self.connect(
+                (self.blocks_stream_to_vector_1, 0),
+                (self.tagdbg_vec1, 0)
+            )
+            self.connect(
+                (self.fft_vxx_1, 0),
+                (self.tagdbg_fft1, 0)
+            )
+
+            print("[TAG-DIAG] pipeline tag debugging enabled")
 
 
     def closeEvent(self, event):
