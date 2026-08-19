@@ -5,34 +5,36 @@ import pmt
 from gnuradio import gr
 
 
-class tdm_packet_router(gr.tagged_stream_block):
+class tdm_packet_router(gr.sync_block):
     """
-    One tagged WiFi packet in.
-    Two equal-length tagged streams out.
+    Tagged WiFi stream -> two synchronous TX streams.
 
-    packet 0 -> TX0=data, TX1=0
-    packet 1 -> TX0=0,    TX1=data
-    packet 2 -> TX0=data, TX1=0
+    packet 0: TX0=data, TX1=zero
+    packet 1: TX0=zero, TX1=data
+    packet 2: TX0=data, TX1=zero
     ...
 
-    The block preserves packet timing/length on both UHD ports.
+    packet_len and all other input tags are copied to BOTH outputs.
+    This keeps both UHD channels time-aligned and tag-aligned.
     """
 
     def __init__(self, length_tag_key="packet_len"):
-        gr.tagged_stream_block.__init__(
+        gr.sync_block.__init__(
             self,
             name="tdm_packet_router",
             in_sig=[np.complex64],
             out_sig=[np.complex64, np.complex64],
-            length_tag_key=length_tag_key,
         )
 
-        self.packet_index = 0
-        self.slot_key = pmt.intern("tx_slot")
-        self.cycle_key = pmt.intern("tdm_cycle")
+        self.length_tag_key = pmt.intern(length_tag_key)
+        self.tx_slot_key = pmt.intern("tx_slot")
+        self.tdm_cycle_key = pmt.intern("tdm_cycle")
 
-    def calculate_output_stream_length(self, ninput_items):
-        return int(ninput_items[0])
+        self.packet_index = 0
+        self.current_slot = 0
+
+        # We copy tags ourselves to both outputs.
+        self.set_tag_propagation_policy(gr.TPP_DONT)
 
     def work(self, input_items, output_items):
         x = input_items[0]
@@ -41,35 +43,119 @@ class tdm_packet_router(gr.tagged_stream_block):
 
         n = len(x)
 
+        if n == 0:
+            return 0
+
+        abs_start = self.nitems_read(0)
+        abs_end = abs_start + n
+
+        # Start with both RF streams zero.
         tx0[:n] = 0
         tx1[:n] = 0
 
-        slot = self.packet_index & 1
-        cycle = self.packet_index // 2
+        #
+        # Get every input tag in this scheduler window.
+        #
+        tags = []
+        self.get_tags_in_range(
+            tags,
+            0,
+            abs_start,
+            abs_end,
+        )
 
-        if slot == 0:
-            tx0[:n] = x
-        else:
-            tx1[:n] = x
+        #
+        # packet_len tags define packet starts.
+        #
+        packet_tags = [
+            t for t in tags
+            if pmt.eq(t.key, self.length_tag_key)
+        ]
 
-        # Metadata tags on BOTH synchronous output streams.
-        for port in (0, 1):
-            off = self.nitems_written(port)
+        packet_tags.sort(key=lambda t: t.offset)
 
-            self.add_item_tag(
-                port,
-                off,
-                self.slot_key,
-                pmt.from_long(slot),
+        #
+        # Build segments:
+        # current slot is active until a new packet_len tag appears.
+        #
+        cursor = 0
+        slot = self.current_slot
+
+        for tag in packet_tags:
+            rel = int(tag.offset - abs_start)
+
+            # Portion before this new packet start belongs
+            # to the previous packet/slot.
+            if rel > cursor:
+                if slot == 0:
+                    tx0[cursor:rel] = x[cursor:rel]
+                else:
+                    tx1[cursor:rel] = x[cursor:rel]
+
+            #
+            # New packet starts here.
+            #
+            slot = self.packet_index & 1
+            cycle = self.packet_index // 2
+
+            print(
+                f"[TDM-ROUTER] packet={self.packet_index} "
+                f"cycle={cycle} slot=TX{slot}"
             )
 
-            self.add_item_tag(
-                port,
-                off,
-                self.cycle_key,
-                pmt.from_long(cycle),
-            )
+            #
+            # Add explicit TDM metadata to BOTH output streams.
+            #
+            for port in (0, 1):
+                out_off = self.nitems_written(port) + rel
 
-        self.packet_index += 1
+                self.add_item_tag(
+                    port,
+                    out_off,
+                    self.tx_slot_key,
+                    pmt.from_long(slot),
+                )
+
+                self.add_item_tag(
+                    port,
+                    out_off,
+                    self.tdm_cycle_key,
+                    pmt.from_long(cycle),
+                )
+
+            self.packet_index += 1
+            cursor = rel
+
+        #
+        # Remaining samples belong to the most recent slot.
+        #
+        if cursor < n:
+            if slot == 0:
+                tx0[cursor:n] = x[cursor:n]
+            else:
+                tx1[cursor:n] = x[cursor:n]
+
+        self.current_slot = slot
+
+        #
+        # Copy original stream tags to BOTH outputs.
+        # This includes packet_len, which UHD needs.
+        #
+        for tag in tags:
+            rel = int(tag.offset - abs_start)
+
+            if rel < 0 or rel >= n:
+                continue
+
+            for port in (0, 1):
+                out_off = self.nitems_written(port) + rel
+
+                self.add_item_tag(
+                    port,
+                    out_off,
+                    tag.key,
+                    tag.value,
+                    tag.srcid,
+                )
 
         return n
