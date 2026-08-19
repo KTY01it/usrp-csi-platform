@@ -226,6 +226,13 @@ class csi_ltf_estimator(gr.sync_block):
 
             is_ltf_here = by_tag or by_corr
 
+            # Strict-tag mode:
+            # a sync tag marks the beginning of the L-LTF pair.
+            # The immediately following FFT vector is treated as LTF2;
+            # it does NOT need another tag.
+            if self.require_tag and self.seen_first_ltf:
+                is_ltf_here = True
+
             # 3) FSM: SEARCH → LTF1 → LTF2 → emit CSI → COOLDOWN
             if not self.seen_first_ltf:
                 if is_ltf_here:
