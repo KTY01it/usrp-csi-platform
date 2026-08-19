@@ -43,6 +43,7 @@ from gnuradio.qtgui import Range, RangeWidget
 from PyQt5 import QtCore
 import ieee802_11
 from csi_ltf_estimator import csi_ltf_estimator
+from csi_tag_collector import csi_tag_collector
 
 
 
@@ -332,6 +333,17 @@ class wifi_rx(gr.top_block, Qt.QWidget):
         self.ieee802_11_sync_short_1 = ieee802_11.sync_short(0.56, 2, False, False)
         self.ieee802_11_sync_long_1 = ieee802_11.sync_long(sync_length, False, False)
         self.fft_vxx_1 = fft.fft_vcc(64, True, window.rectangular(64), True, 1)
+
+        # RX1 equalizer solely for official LS CSI extraction.
+        self.ieee802_11_frame_equalizer_1 = (
+            ieee802_11.frame_equalizer(
+                ieee802_11.Equalizer(chan_est),
+                freq,
+                samp_rate,
+                False,
+                False,
+            )
+        )
         self.blocks_stream_to_vector_1 = blocks.stream_to_vector(gr.sizeof_gr_complex*1, 64)
 
         if self.debug_pipeline_tags:
@@ -401,6 +413,52 @@ class wifi_rx(gr.top_block, Qt.QWidget):
         print("[CSI-SIMO-STAGE1] ch1: full WiFi sync/FFT/CSI path")
 
         ##################################################
+        # Official frame_equalizer LS CSI collectors
+        ##################################################
+
+        self.csi_eq_bin0 = os.path.join(
+            self.csi_dir,
+            "csi_eq_ch0.bin",
+        )
+
+        self.csi_eq_meta0 = os.path.join(
+            self.csi_dir,
+            "csi_eq_ch0.jsonl",
+        )
+
+        self.csi_eq_collector0 = csi_tag_collector(
+            rx_chan=0,
+            bin_path=self.csi_eq_bin0,
+            meta_path=self.csi_eq_meta0,
+        )
+
+        self.csi_eq_bin1 = os.path.join(
+            self.csi_dir,
+            "csi_eq_ch1.bin",
+        )
+
+        self.csi_eq_meta1 = os.path.join(
+            self.csi_dir,
+            "csi_eq_ch1.jsonl",
+        )
+
+        self.csi_eq_collector1 = csi_tag_collector(
+            rx_chan=1,
+            bin_path=self.csi_eq_bin1,
+            meta_path=self.csi_eq_meta1,
+        )
+
+        print(
+            "[CSI-EQ] official LS CSI ch0:",
+            self.csi_eq_bin0,
+        )
+
+        print(
+            "[CSI-EQ] official LS CSI ch1:",
+            self.csi_eq_bin1,
+        )
+
+        ##################################################
         # Connections
         ##################################################
         self.connect((self.fft_vxx_0, 0), (self.csi_est0, 0))
@@ -452,10 +510,27 @@ class wifi_rx(gr.top_block, Qt.QWidget):
         self.connect((self.blocks_delay_1, 0), (self.ieee802_11_sync_long_1, 1))
         self.connect((self.ieee802_11_sync_long_1, 0), (self.blocks_stream_to_vector_1, 0))
         self.connect((self.blocks_stream_to_vector_1, 0), (self.fft_vxx_1, 0))
+
+        # RX1 official frame equalizer.
+        self.connect(
+            (self.fft_vxx_1, 0),
+            (self.ieee802_11_frame_equalizer_1, 0)
+        )
         self.connect((self.pdu_pdu_to_tagged_stream_0, 0), (self.qtgui_const_sink_x_0, 0))
         self.connect((self.uhd_usrp_source_0, 0), (self.blocks_complex_to_mag_squared_0, 0))
         self.connect((self.uhd_usrp_source_0, 0), (self.blocks_delay_0_0, 0))
         self.connect((self.uhd_usrp_source_0, 0), (self.blocks_multiply_xx_0, 0))
+
+        # Official frame_equalizer LS CSI tag collectors.
+        self.connect(
+            (self.ieee802_11_frame_equalizer_0, 0),
+            (self.csi_eq_collector0, 0)
+        )
+
+        self.connect(
+            (self.ieee802_11_frame_equalizer_1, 0),
+            (self.csi_eq_collector1, 0)
+        )
 
         # Diagnostic fan-outs only. They do not alter the normal RX path.
         if self.debug_pipeline_tags:
