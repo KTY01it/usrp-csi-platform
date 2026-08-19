@@ -19,7 +19,9 @@ class csi_tag_collector(gr.sync_block):
         gr.sync_block.__init__(
             self,
             name=f"csi_tag_collector_rx{rx_chan}",
-            in_sig=[np.uint8],
+            # frame_equalizer output:
+            # one GNU Radio item = 48 uint8 data subcarriers
+            in_sig=[(np.uint8, 48)],
             out_sig=None,
         )
 
