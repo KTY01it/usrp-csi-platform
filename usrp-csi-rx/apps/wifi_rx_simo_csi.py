@@ -325,11 +325,21 @@ class wifi_rx(gr.top_block, Qt.QWidget):
         self.csi_dir = os.environ.get("RX_CSI_DIR", "csi")
         os.makedirs(self.csi_dir, exist_ok=True)
         self.csi_bin_path = os.path.join(self.csi_dir, "csi_ch0.bin")
-        self.csi_est0 = csi_ltf_estimator(ltf_tag_keys=("ofdm_start", "wifi_start"))
+        self.csi_est0 = csi_ltf_estimator(
+            ltf_tag_keys=("ofdm_start", "wifi_start"),
+            rx_chan_id=0,
+            sample_rate=samp_rate,
+            require_tag=True,
+        )
         self.csi_sink0 = blocks.file_sink(gr.sizeof_gr_complex, self.csi_bin_path)
         self.pdu2ts0 = pdu.pdu_to_tagged_stream(gr.types.complex_t, "packet_len")
         self.csi_bin_path1 = os.path.join(self.csi_dir, "csi_ch1.bin")
-        self.csi_est1 = csi_ltf_estimator(ltf_tag_keys=("ofdm_start", "wifi_start"))
+        self.csi_est1 = csi_ltf_estimator(
+            ltf_tag_keys=("ofdm_start", "wifi_start"),
+            rx_chan_id=1,
+            sample_rate=samp_rate,
+            require_tag=True,
+        )
         self.csi_sink1 = blocks.file_sink(gr.sizeof_gr_complex, self.csi_bin_path1)
         self.pdu2ts1 = pdu.pdu_to_tagged_stream(gr.types.complex_t, "packet_len")
         print("[CSI-SIMO-STAGE1] CSI output ch0:", self.csi_bin_path)

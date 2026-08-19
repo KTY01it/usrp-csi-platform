@@ -37,6 +37,7 @@ class csi_ltf_estimator(gr.sync_block):
                  meta_every_n=100,
                  sample_rate=None,          # Hz, để suy ra microseconds từ rx_time
                  sym_samps=80,               # số sample/OFDM symbol (20 MHz -> 80)
+                 require_tag=False,
                  ):           # ghi JSON thưa
         gr.sync_block.__init__(self,
             name="csi_ltf_estimator",
@@ -60,6 +61,7 @@ class csi_ltf_estimator(gr.sync_block):
         self.prev_vec = None
         self.sym_idx = 0
         self.corr_thresh = float(corr_thresh)
+        self.require_tag = bool(require_tag)
 
         # Chống “mưa CSI”
         self.cooldown_syms = 160      # ~ mỗi khung 1 CSI
@@ -212,8 +214,16 @@ class csi_ltf_estimator(gr.sync_block):
             # 2) Phát hiện LTF (ưu tiên tag; tương quan chỉ dự phòng)
             by_tag, tag = self._has_ltf_tag(rel_idx)
             by_corr, rho = (False, None)
-            if (not by_tag) and (self.prev_vec is not None):
-                by_corr, rho = self._looks_like_ltf_pair(self.prev_vec, v)
+
+            if (
+                (not self.require_tag)
+                and (not by_tag)
+                and (self.prev_vec is not None)
+            ):
+                by_corr, rho = self._looks_like_ltf_pair(
+                    self.prev_vec, v
+                )
+
             is_ltf_here = by_tag or by_corr
 
             # 3) FSM: SEARCH → LTF1 → LTF2 → emit CSI → COOLDOWN
