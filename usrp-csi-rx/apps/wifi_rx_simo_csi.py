@@ -44,6 +44,7 @@ from PyQt5 import QtCore
 import ieee802_11
 from csi_ltf_estimator import csi_ltf_estimator
 from csi_tag_collector import csi_tag_collector
+from mac_seq_tap import mac_seq_tap
 
 
 
@@ -289,6 +290,10 @@ class wifi_rx(gr.top_block, Qt.QWidget):
         self.ieee802_11_parse_mac_0 = ieee802_11.parse_mac(False, True)
         self.ieee802_11_frame_equalizer_0 = ieee802_11.frame_equalizer(ieee802_11.Equalizer(chan_est), freq, samp_rate, False, False)
         self.ieee802_11_decode_mac_0 = ieee802_11.decode_mac(True, False)
+
+        # Separate decoder for RX1 so that both receive chains
+        # obtain their own packet sequence numbers.
+        self.ieee802_11_decode_mac_1 = ieee802_11.decode_mac(False, False)
         self.fft_vxx_0 = fft.fft_vcc(64, True, window.rectangular(64), True, 1)
         self.blocks_stream_to_vector_0 = blocks.stream_to_vector(gr.sizeof_gr_complex*1, 64)
 
@@ -459,6 +464,30 @@ class wifi_rx(gr.top_block, Qt.QWidget):
         )
 
         ##################################################
+        # MAC sequence taps
+        ##################################################
+
+        self.mac_seq0 = []
+
+        self.mac_seq1 = []
+
+        def _seq0_cb(seq):
+            self.mac_seq0.append(int(seq))
+
+        def _seq1_cb(seq):
+            self.mac_seq1.append(int(seq))
+
+        self.mac_seq_tap0 = mac_seq_tap(
+            rx_chan=0,
+            callback=_seq0_cb,
+        )
+
+        self.mac_seq_tap1 = mac_seq_tap(
+            rx_chan=1,
+            callback=_seq1_cb,
+        )
+
+        ##################################################
         # Connections
         ##################################################
         self.connect((self.fft_vxx_0, 0), (self.csi_est0, 0))
@@ -468,7 +497,20 @@ class wifi_rx(gr.top_block, Qt.QWidget):
         self.msg_connect((self.csi_est1, 'csi'), (self.pdu2ts1, 'pdus'))
         self.connect((self.pdu2ts1, 0), (self.csi_sink1, 0))
         self.connect((self.uhd_usrp_source_0, 0), (self.blocks_file_sink_raw_iq, 0))
-        self.msg_connect((self.ieee802_11_decode_mac_0, 'out'), (self.ieee802_11_parse_mac_0, 'in'))
+        self.msg_connect(
+            (self.ieee802_11_decode_mac_0, 'out'),
+            (self.ieee802_11_parse_mac_0, 'in')
+        )
+
+        self.msg_connect(
+            (self.ieee802_11_decode_mac_0, 'out'),
+            (self.mac_seq_tap0, 'in')
+        )
+
+        self.msg_connect(
+            (self.ieee802_11_decode_mac_1, 'out'),
+            (self.mac_seq_tap1, 'in')
+        )
         self.msg_connect((self.ieee802_11_frame_equalizer_0, 'symbols'), (self.pdu_pdu_to_tagged_stream_0, 'pdus'))
         self.connect((self.blocks_complex_to_mag_0, 0), (self.blocks_divide_xx_0, 0))
         self.connect((self.blocks_complex_to_mag_squared_0, 0), (self.blocks_moving_average_xx_0, 0))
@@ -515,6 +557,11 @@ class wifi_rx(gr.top_block, Qt.QWidget):
         self.connect(
             (self.fft_vxx_1, 0),
             (self.ieee802_11_frame_equalizer_1, 0)
+        )
+
+        self.connect(
+            (self.ieee802_11_frame_equalizer_1, 0),
+            (self.ieee802_11_decode_mac_1, 0)
         )
         self.connect((self.pdu_pdu_to_tagged_stream_0, 0), (self.qtgui_const_sink_x_0, 0))
         self.connect((self.uhd_usrp_source_0, 0), (self.blocks_complex_to_mag_squared_0, 0))
