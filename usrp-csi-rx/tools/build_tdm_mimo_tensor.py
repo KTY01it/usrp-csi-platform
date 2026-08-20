@@ -104,14 +104,11 @@ def main():
         )
 
     #
-    # Find adjacent even/odd sequence pairs.
+    # Physical TDM mapping established by TX0-only
+    # calibration:
     #
-    # For now:
-    #   tensor[..., tx=0] := even-sequence slot
-    #   tensor[..., tx=1] := odd-sequence slot
-    #
-    # These are LOGICAL TDM slots, not yet calibrated
-    # to physical USRP TX0/TX1.
+    #   even MAC sequence -> physical TX0
+    #   odd  MAC sequence -> physical TX1
     #
     valid_set = set(valid)
 
@@ -175,11 +172,11 @@ def main():
             seq_odd,
         ]
 
-        # Logical TX slot 0 = even seq
+        # Physical TX0 = even MAC sequence
         H[n, :, 0, 0] = rx0[seq_even]["H"]
         H[n, :, 1, 0] = rx1[seq_even]["H"]
 
-        # Logical TX slot 1 = odd seq
+        # Physical TX1 = odd MAC sequence
         H[n, :, 0, 1] = rx0[seq_odd]["H"]
         H[n, :, 1, 1] = rx1[seq_odd]["H"]
 
@@ -205,7 +202,7 @@ def main():
     if args.output is None:
         args.output = (
             root
-            / "H_raw_tdm_logical_slots.npz"
+            / "H_raw_tdm_physical_2x2.npz"
         )
 
     np.savez_compressed(
@@ -218,13 +215,13 @@ def main():
         nsub=np.int32(52),
         rx_count=np.int32(2),
         tx_slot_count=np.int32(2),
-        tx_slot_mapping=np.array(
+        tx_mapping=np.array(
             [
-                "logical_even_seq",
-                "logical_odd_seq",
+                "physical_TX0_even_seq",
+                "physical_TX1_odd_seq",
             ]
         ),
-        physical_tx_mapping_valid=np.bool_(False),
+        physical_tx_mapping_valid=np.bool_(True),
     )
 
     print("capture:", root)
@@ -238,9 +235,9 @@ def main():
 
     print()
     print(
-        "WARNING: tx dimension currently means "
-        "[even-seq slot, odd-seq slot], NOT yet "
-        "physical [TX0, TX1]."
+        "Physical TX mapping: "
+        "tx=0 -> TX0/even-seq, "
+        "tx=1 -> TX1/odd-seq"
     )
 
 
