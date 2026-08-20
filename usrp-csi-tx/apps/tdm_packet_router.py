@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+import os
 import numpy as np
 import pmt
 from gnuradio import gr
@@ -41,6 +42,23 @@ class tdm_packet_router(gr.sync_block):
         self.set_output_multiple(65536)
 
         self.debug_limit = 20
+
+        active = os.environ.get(
+            "TDM_ACTIVE_TX",
+            "both"
+        ).strip().lower()
+
+        if active not in ("both", "0", "1"):
+            raise ValueError(
+                "TDM_ACTIVE_TX must be one of: both, 0, 1"
+            )
+
+        self.active_tx = active
+
+        print(
+            f"[TDM-ROUTER] active physical TX mode = "
+            f"{self.active_tx}"
+        )
 
     def work(self, input_items, output_items):
         x = input_items[0]
@@ -92,9 +110,11 @@ class tdm_packet_router(gr.sync_block):
             # to the previous packet/slot.
             if rel > cursor:
                 if slot == 0:
-                    tx0[cursor:rel] = x[cursor:rel]
+                    if self.active_tx in ("both", "0"):
+                        tx0[cursor:rel] = x[cursor:rel]
                 else:
-                    tx1[cursor:rel] = x[cursor:rel]
+                    if self.active_tx in ("both", "1"):
+                        tx1[cursor:rel] = x[cursor:rel]
 
             #
             # New packet starts here.
@@ -139,9 +159,11 @@ class tdm_packet_router(gr.sync_block):
         #
         if cursor < n:
             if slot == 0:
-                tx0[cursor:n] = x[cursor:n]
+                if self.active_tx in ("both", "0"):
+                    tx0[cursor:n] = x[cursor:n]
             else:
-                tx1[cursor:n] = x[cursor:n]
+                if self.active_tx in ("both", "1"):
+                    tx1[cursor:n] = x[cursor:n]
 
         self.current_slot = slot
 
