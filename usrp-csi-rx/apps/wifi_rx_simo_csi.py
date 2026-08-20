@@ -45,6 +45,7 @@ import ieee802_11
 from csi_ltf_estimator import csi_ltf_estimator
 from csi_tag_collector import csi_tag_collector
 from mac_seq_tap import mac_seq_tap
+from decoded_csi_collector import decoded_csi_collector
 
 
 
@@ -488,6 +489,34 @@ class wifi_rx(gr.top_block, Qt.QWidget):
         )
 
         ##################################################
+        # CRC-valid decoded packet CSI collectors
+        ##################################################
+
+        self.csi_pdu_collector0 = decoded_csi_collector(
+            rx_chan=0,
+            bin_path=os.path.join(
+                self.csi_dir,
+                "csi_pdu_ch0.bin",
+            ),
+            meta_path=os.path.join(
+                self.csi_dir,
+                "csi_pdu_ch0.jsonl",
+            ),
+        )
+
+        self.csi_pdu_collector1 = decoded_csi_collector(
+            rx_chan=1,
+            bin_path=os.path.join(
+                self.csi_dir,
+                "csi_pdu_ch1.bin",
+            ),
+            meta_path=os.path.join(
+                self.csi_dir,
+                "csi_pdu_ch1.jsonl",
+            ),
+        )
+
+        ##################################################
         # Connections
         ##################################################
         self.connect((self.fft_vxx_0, 0), (self.csi_est0, 0))
@@ -510,6 +539,16 @@ class wifi_rx(gr.top_block, Qt.QWidget):
         self.msg_connect(
             (self.ieee802_11_decode_mac_1, 'out'),
             (self.mac_seq_tap1, 'in')
+        )
+
+        self.msg_connect(
+            (self.ieee802_11_decode_mac_0, 'out'),
+            (self.csi_pdu_collector0, 'in')
+        )
+
+        self.msg_connect(
+            (self.ieee802_11_decode_mac_1, 'out'),
+            (self.csi_pdu_collector1, 'in')
         )
         self.msg_connect((self.ieee802_11_frame_equalizer_0, 'symbols'), (self.pdu_pdu_to_tagged_stream_0, 'pdus'))
         self.connect((self.blocks_complex_to_mag_0, 0), (self.blocks_divide_xx_0, 0))
