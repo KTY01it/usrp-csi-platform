@@ -347,8 +347,8 @@ def main():
         print(
             "fraction z >= 2:",
             float(
-                np.nanmean(
-                    x >= 2
+                np.mean(
+                    x[np.isfinite(x)] >= 2
                 )
             ),
         )
@@ -356,8 +356,8 @@ def main():
         print(
             "fraction z >= 3:",
             float(
-                np.nanmean(
-                    x >= 3
+                np.mean(
+                    x[np.isfinite(x)] >= 3
                 )
             ),
         )
@@ -401,8 +401,8 @@ def main():
         print(
             "fraction z >= 2:",
             float(
-                np.nanmean(
-                    x >= 2
+                np.mean(
+                    x[np.isfinite(x)] >= 2
                 )
             ),
         )
@@ -410,8 +410,8 @@ def main():
         print(
             "fraction z >= 3:",
             float(
-                np.nanmean(
-                    x >= 3
+                np.mean(
+                    x[np.isfinite(x)] >= 3
                 )
             ),
         )
