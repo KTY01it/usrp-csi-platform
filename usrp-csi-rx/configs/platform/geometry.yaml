@@ -1,0 +1,50 @@
+schema_version: 1
+
+coordinate_system:
+  name: room_local
+  unit: meter
+
+  convention:
+    x: "horizontal room axis"
+    y: "horizontal room axis"
+    z: "vertical"
+
+geometry_status:
+  measured: false
+  ready_for_absolute_spatial_processing: false
+
+tx_array:
+  device: "USRP B210"
+
+  antennas:
+    TX0:
+      xyz_m: null
+      phase_center_measured: false
+
+    TX1:
+      xyz_m: null
+      phase_center_measured: false
+
+rx_array:
+  device: "USRP B210"
+
+  antennas:
+    RX0:
+      xyz_m: null
+      phase_center_measured: false
+
+    RX1:
+      xyz_m: null
+      phase_center_measured: false
+
+platform_pose:
+  xyz_m: null
+
+  orientation_deg:
+    yaw: null
+    pitch: null
+    roll: null
+
+notes:
+  - "Do not enable absolute AoA/AoD/backprojection until antenna phase-center geometry is measured."
+  - "Coordinates must refer to antenna phase centers, not USRP enclosure edges."

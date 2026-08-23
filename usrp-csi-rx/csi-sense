@@ -1,0 +1,388 @@
+#!/usr/bin/env python3
+
+import argparse
+import shutil
+import subprocess
+import sys
+from pathlib import Path
+
+try:
+    import yaml
+except ImportError:
+    print("ERROR: PyYAML is not installed.")
+    print("Install with:")
+    print("  sudo apt install python3-yaml")
+    sys.exit(2)
+
+
+ROOT = Path(__file__).resolve().parent
+
+CONFIG_DIR = ROOT / "configs" / "platform"
+
+CONFIG_FILES = {
+    "system": CONFIG_DIR / "system.yaml",
+    "geometry": CONFIG_DIR / "geometry.yaml",
+    "acquisition": CONFIG_DIR / "acquisition.yaml",
+    "calibration": CONFIG_DIR / "calibration.yaml",
+}
+
+
+def load_yaml(path):
+    with open(path, "r", encoding="utf-8") as f:
+        return yaml.safe_load(f)
+
+
+def print_header():
+    print("=" * 62)
+    print("USRP B210 MIMO-CSI SENSING PLATFORM")
+    print("=" * 62)
+
+
+def check_file(label, path):
+    ok = path.exists()
+
+    print(
+        f"{label:<28}",
+        "PASS" if ok else "FAIL",
+        str(path.relative_to(ROOT))
+    )
+
+    return ok
+
+
+def command_exists(name):
+    return shutil.which(name) is not None
+
+
+def doctor():
+    print_header()
+
+    print()
+    print("[CONFIGURATION]")
+
+    config_ok = True
+
+    configs = {}
+
+    for name, path in CONFIG_FILES.items():
+        ok = check_file(
+            name,
+            path
+        )
+
+        config_ok &= ok
+
+        if ok:
+            try:
+                configs[name] = load_yaml(path)
+            except Exception as e:
+                print(
+                    f"  YAML ERROR {name}:",
+                    e
+                )
+                config_ok = False
+
+    print()
+    print("[SOFTWARE]")
+
+    tools = [
+        "python3",
+        "uhd_find_devices",
+        "uhd_usrp_probe",
+    ]
+
+    software_ok = True
+
+    for tool in tools:
+        ok = command_exists(tool)
+
+        print(
+            f"{tool:<28}",
+            "PASS" if ok else "FAIL"
+        )
+
+        software_ok &= ok
+
+    print()
+    print("[USRP]")
+
+    usrp_ok = False
+
+    if command_exists(
+        "uhd_find_devices"
+    ):
+        try:
+            result = subprocess.run(
+                [
+                    "uhd_find_devices",
+                ],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                timeout=15,
+            )
+
+            text = result.stdout
+
+            if (
+                "B210" in text
+                or "B200" in text
+                or "product: B210" in text
+            ):
+                usrp_ok = True
+
+        except Exception as e:
+            print(
+                "USRP check error:",
+                e
+            )
+
+    print(
+        f"{'USRP B210 detected':<28}",
+        "PASS" if usrp_ok else "FAIL"
+    )
+
+    print()
+    print("[CALIBRATION]")
+
+    calibration_ok = False
+
+    if "calibration" in configs:
+
+        c = configs[
+            "calibration"
+        ][
+            "active_profile"
+        ]
+
+        ref_file = (
+            ROOT
+            / c["reference"][
+                "calibration_file"
+            ]
+        )
+
+        bg_file = (
+            ROOT
+            / c["background"][
+                "model_file"
+            ]
+        )
+
+        ref_ok = ref_file.exists()
+        bg_ok = bg_file.exists()
+
+        print(
+            f"{'reference calibration':<28}",
+            "PASS" if ref_ok else "FAIL"
+        )
+
+        print(
+            f"{'background model':<28}",
+            "PASS" if bg_ok else "FAIL"
+        )
+
+        calibration_ok = (
+            ref_ok
+            and bg_ok
+        )
+
+    print()
+    print("[GEOMETRY]")
+
+    geometry_ready = False
+
+    if "geometry" in configs:
+
+        g = configs["geometry"]
+
+        geometry_ready = bool(
+            g.get(
+                "geometry_status",
+                {}
+            ).get(
+                "ready_for_absolute_spatial_processing",
+                False
+            )
+        )
+
+    print(
+        f"{'absolute spatial geometry':<28}",
+        (
+            "PASS"
+            if geometry_ready
+            else "NOT CONFIGURED"
+        )
+    )
+
+    print()
+    print("[SUMMARY]")
+
+    acquisition_ready = (
+        config_ok
+        and software_ok
+        and usrp_ok
+        and calibration_ok
+    )
+
+    print(
+        "CSI acquisition backend :",
+        (
+            "READY"
+            if acquisition_ready
+            else "NOT READY"
+        )
+    )
+
+    print(
+        "Spatial reconstruction  :",
+        (
+            "READY"
+            if geometry_ready
+            else "BLOCKED BY GEOMETRY"
+        )
+    )
+
+    if acquisition_ready:
+        print()
+        print(
+            "Platform configuration layer: PASS"
+        )
+
+    return 0 if acquisition_ready else 1
+
+
+def show_config():
+    print_header()
+
+    for name, path in CONFIG_FILES.items():
+
+        print()
+        print(
+            f"[{name.upper()}]"
+        )
+
+        if not path.exists():
+            print("MISSING")
+            continue
+
+        data = load_yaml(path)
+
+        print(
+            yaml.safe_dump(
+                data,
+                sort_keys=False,
+                allow_unicode=True
+            )
+        )
+
+
+def status():
+    print_header()
+
+    system = load_yaml(
+        CONFIG_FILES["system"]
+    )
+
+    calibration = load_yaml(
+        CONFIG_FILES["calibration"]
+    )
+
+    geometry = load_yaml(
+        CONFIG_FILES["geometry"]
+    )
+
+    rf = system["rf"]
+
+    print(
+        "Platform      :",
+        system["platform"]["name"]
+    )
+
+    print(
+        "RF frequency  :",
+        f'{rf["center_frequency_hz"]/1e9:.3f} GHz'
+    )
+
+    print(
+        "Sample rate   :",
+        f'{rf["sample_rate_hz"]/1e6:.3f} MHz'
+    )
+
+    print(
+        "MIMO mode     :",
+        system["mimo"]["mode"]
+    )
+
+    print(
+        "CSI carriers  :",
+        rf["active_subcarriers"]
+    )
+
+    print(
+        "Calibration   :",
+        calibration[
+            "active_profile"
+        ]["id"]
+    )
+
+    print(
+        "Geometry      :",
+        (
+            "READY"
+            if geometry[
+                "geometry_status"
+            ][
+                "ready_for_absolute_spatial_processing"
+            ]
+            else "NOT CONFIGURED"
+        )
+    )
+
+
+def main():
+
+    parser = argparse.ArgumentParser(
+        prog="csi-sense",
+        description=(
+            "USRP B210 2x2 MIMO-CSI "
+            "communication and sensing framework"
+        ),
+    )
+
+    sub = parser.add_subparsers(
+        dest="command",
+        required=True,
+    )
+
+    sub.add_parser(
+        "doctor",
+        help="Check hardware, configs and calibration.",
+    )
+
+    sub.add_parser(
+        "status",
+        help="Show active platform status.",
+    )
+
+    sub.add_parser(
+        "config",
+        help="Show unified configuration.",
+    )
+
+    args = parser.parse_args()
+
+    if args.command == "doctor":
+        sys.exit(doctor())
+
+    if args.command == "status":
+        status()
+        return
+
+    if args.command == "config":
+        show_config()
+        return
+
+
+if __name__ == "__main__":
+    main()

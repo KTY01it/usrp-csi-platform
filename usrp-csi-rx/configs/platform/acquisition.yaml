@@ -1,0 +1,51 @@
+schema_version: 1
+
+acquisition:
+  default_mode: step
+
+  modes:
+    step:
+      description: "Stop platform at known view, then capture."
+      reconstruction_compatible: true
+
+    continuous:
+      description: "Continuous CSI capture while platform/target moves."
+      reconstruction_compatible_without_tracking: false
+
+capture:
+  duration_s: 10
+
+  minimum:
+    complete_tdm_cycles: 80
+    valid_packet_fraction: 0.80
+
+  output_root: "sessions"
+
+quality_control:
+  enabled: true
+
+  rx_diff_tx0:
+    minimum_valid_subcarriers: 45
+    minimum_reference_coherence: 0.80
+
+  tx1:
+    policy: "quality_weighted"
+
+processing:
+  build_tdm_tensor: true
+  apply_reference_calibration: true
+  apply_background_model: true
+
+  build_complex_differential_rf: true
+  build_differential_delay_profile: true
+
+  build_common_phase_aligned_mimo: true
+  build_phase_curvature: true
+
+dataset:
+  save_raw_csi: true
+  save_calibrated_csi: true
+  save_derived_features: true
+  save_quality_metadata: true
+  save_geometry: true
+  save_manifest: true

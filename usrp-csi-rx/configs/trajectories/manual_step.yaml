@@ -1,0 +1,11 @@
+schema_version: 1
+
+trajectory:
+  name: manual_step
+  type: manually_registered_known_pose
+
+  description: >
+    User moves the platform between known positions.
+    Each view must have a measured pose before spatial reconstruction.
+
+views: []
