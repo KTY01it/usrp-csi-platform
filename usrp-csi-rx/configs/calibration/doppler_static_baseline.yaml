@@ -41,3 +41,27 @@ notes:
   - Single static baseline; values are empirical noise-floor references, not universal thresholds.
   - Nonzero spectral peak in static data is not interpreted as physical motion.
   - Motion validity requires controlled target-vs-static validation.
+
+high_cadence_validation:
+  packet_interval_ms: 20
+  approximate_tdm_cycle_s: 0.04035
+  approximate_slow_time_sample_rate_hz: 24.8
+  approximate_doppler_nyquist_hz: 12.4
+
+  acquisition_valid: true
+  rf_timing_valid: true
+  controlled_motion_capture_valid: true
+
+  scalar_spectral_motion_separation: false
+  subcarrier_spectral_motion_separation: false
+
+  spectral_excess_static_ratio: 0.2292
+  median_subcarrier_excess_static_ratio: 0.2329
+  p95_subcarrier_excess_static_ratio: 0.3069
+  subcarriers_exceeding_static_ratio_1: 0
+
+  physical_doppler_frequency_valid: false
+  micro_doppler_valid: false
+  physical_velocity_valid: false
+
+  conclusion: temporal_motion_evidence_only
