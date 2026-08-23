@@ -498,6 +498,10 @@ class wifi_rx(gr.top_block, Qt.QWidget):
                 self.csi_dir,
                 "csi_pdu_ch0.bin",
             ),
+            spatial_bin_path=os.path.join(
+                self.csi_dir,
+                "csi_spatial_pdu_ch0.bin",
+            ),
             meta_path=os.path.join(
                 self.csi_dir,
                 "csi_pdu_ch0.jsonl",
@@ -509,6 +513,10 @@ class wifi_rx(gr.top_block, Qt.QWidget):
             bin_path=os.path.join(
                 self.csi_dir,
                 "csi_pdu_ch1.bin",
+            ),
+            spatial_bin_path=os.path.join(
+                self.csi_dir,
+                "csi_spatial_pdu_ch1.bin",
             ),
             meta_path=os.path.join(
                 self.csi_dir,

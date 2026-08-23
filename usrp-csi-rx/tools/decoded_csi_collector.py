@@ -21,6 +21,7 @@ class decoded_csi_collector(gr.basic_block):
         self,
         rx_chan=0,
         bin_path=None,
+        spatial_bin_path=None,
         meta_path=None,
     ):
         gr.basic_block.__init__(
@@ -32,9 +33,13 @@ class decoded_csi_collector(gr.basic_block):
 
         self.rx_chan = int(rx_chan)
         self.bin_path = bin_path
+        self.spatial_bin_path = spatial_bin_path
         self.meta_path = meta_path
 
         self.key_csi = pmt.intern("csi")
+        self.key_csi_spatial = pmt.intern(
+            "csi_spatial_raw"
+        )
         self.key_snr = pmt.intern("snr")
         self.key_freq = pmt.intern("nominal frequency")
         self.key_foff = pmt.intern("frequency offset")
@@ -48,6 +53,7 @@ class decoded_csi_collector(gr.basic_block):
         self.count = 0
 
         self.bin_fh = None
+        self.spatial_bin_fh = None
         self.meta_fh = None
 
         if self.bin_path:
@@ -57,6 +63,18 @@ class decoded_csi_collector(gr.basic_block):
             )
             self.bin_fh = open(
                 self.bin_path,
+                "wb",
+            )
+
+        if self.spatial_bin_path:
+            os.makedirs(
+                os.path.dirname(
+                    self.spatial_bin_path
+                ),
+                exist_ok=True,
+            )
+            self.spatial_bin_fh = open(
+                self.spatial_bin_path,
                 "wb",
             )
 
@@ -231,6 +249,39 @@ class decoded_csi_collector(gr.basic_block):
                 return
 
             #
+            # Optional pre-beta spatial CSI.
+            #
+            spatial_pmt = pmt.dict_ref(
+                meta,
+                self.key_csi_spatial,
+                pmt.PMT_NIL,
+            )
+
+            H_spatial = None
+
+            if spatial_pmt is not pmt.PMT_NIL:
+                try:
+                    H_spatial = np.asarray(
+                        pmt.c32vector_elements(
+                            spatial_pmt
+                        ),
+                        dtype=np.complex64,
+                    )
+                except Exception:
+                    H_spatial = None
+
+            if (
+                H_spatial is not None
+                and H_spatial.size != 52
+            ):
+                print(
+                    f"[CSI-PDU] RX{self.rx_chan} "
+                    f"seq={seq} invalid spatial CSI "
+                    f"length={H_spatial.size}"
+                )
+                H_spatial = None
+
+            #
             # Host-side packet reception timestamps.
             #
             # monotonic_ns:
@@ -249,6 +300,15 @@ class decoded_csi_collector(gr.basic_block):
                 H.tofile(self.bin_fh)
                 self.bin_fh.flush()
 
+            if (
+                self.spatial_bin_fh
+                and H_spatial is not None
+            ):
+                H_spatial.tofile(
+                    self.spatial_bin_fh
+                )
+                self.spatial_bin_fh.flush()
+
             rec = {
                 "idx": int(self.count),
                 "seq": int(seq),
@@ -256,6 +316,23 @@ class decoded_csi_collector(gr.basic_block):
                 "csi_len": int(H.size),
                 "abs_mean": float(
                     np.mean(np.abs(H))
+                ),
+                "spatial_csi_present": bool(
+                    H_spatial is not None
+                ),
+                "spatial_csi_len": (
+                    int(H_spatial.size)
+                    if H_spatial is not None
+                    else 0
+                ),
+                "spatial_abs_mean": (
+                    float(
+                        np.mean(
+                            np.abs(H_spatial)
+                        )
+                    )
+                    if H_spatial is not None
+                    else None
                 ),
                 "host_monotonic_ns": int(
                     host_monotonic_ns
@@ -309,6 +386,8 @@ class decoded_csi_collector(gr.basic_block):
                     f"idx={self.count} "
                     f"seq={seq} "
                     f"mean={rec['abs_mean']:.6f} "
+                    f"spatial="
+                    f"{rec['spatial_csi_present']} "
                     f"snr={rec.get('snr')}"
                 )
 
@@ -322,6 +401,12 @@ class decoded_csi_collector(gr.basic_block):
         try:
             if self.bin_fh:
                 self.bin_fh.close()
+        except Exception:
+            pass
+
+        try:
+            if self.spatial_bin_fh:
+                self.spatial_bin_fh.close()
         except Exception:
             pass
 
