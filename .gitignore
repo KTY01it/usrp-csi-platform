@@ -37,3 +37,6 @@ Data*/
 Calib/
 .cache/
 .DS_Store
+
+# Local RF captures and calibration data
+usrp-csi-rx/csi/
