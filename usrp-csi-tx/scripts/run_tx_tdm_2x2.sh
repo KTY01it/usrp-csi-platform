@@ -22,5 +22,6 @@ env -i \
   XAUTHORITY="${XAUTHORITY:-$HOME/.Xauthority}" \
   XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/tmp/runtime-$USER}" \
   TDM_ACTIVE_TX="${TDM_ACTIVE_TX:-both}" \
+  TDM_INTERVAL_MS="${TDM_INTERVAL_MS:-1000}" \
   PYTHONPATH="$(pwd)/apps" \
   /usr/bin/python3 apps/wifi_tx_tdm_2x2.py 2>&1 | tee "$LOG"

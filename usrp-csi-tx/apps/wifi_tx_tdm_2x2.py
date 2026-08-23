@@ -20,6 +20,22 @@ class wifi_tx_tdm_2x2(wifi_tx_base):
 
         self.setWindowTitle("WiFi 2x2 TDM TX")
 
+        interval_ms = int(
+            os.environ.get(
+                "TDM_INTERVAL_MS",
+                str(self.interval)
+            )
+        )
+
+        if interval_ms < 10:
+            raise ValueError(
+                "TDM_INTERVAL_MS must be >= 10 ms"
+            )
+
+        self.set_interval(
+            interval_ms
+        )
+
         #
         # Remove old fixed-TX1 routing:
         #
@@ -76,6 +92,11 @@ class wifi_tx_tdm_2x2(wifi_tx_base):
         print("[TDM-2X2] even packet -> physical TX0")
         print("[TDM-2X2] odd  packet -> physical TX1")
         print("[TDM-2X2] UHD channels=[0,1]")
+        print(
+            "[TDM-2X2] packet interval =",
+            self.interval,
+            "ms"
+        )
         print("[TDM-2X2] gain TX0 =", self.tx_gain)
         print("[TDM-2X2] gain TX1 =", self.tx_gain)
 
