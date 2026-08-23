@@ -2,6 +2,7 @@
 
 import os
 import json
+import time
 import numpy as np
 import pmt
 from gnuradio import gr
@@ -40,6 +41,9 @@ class decoded_csi_collector(gr.basic_block):
         self.key_beta = pmt.intern("beta")
         self.key_encoding = pmt.intern("encoding")
         self.key_frame_bytes = pmt.intern("frame bytes")
+        self.key_rf_sample_index = pmt.intern(
+            "rf_sample_index"
+        )
 
         self.count = 0
 
@@ -78,12 +82,57 @@ class decoded_csi_collector(gr.basic_block):
 
     @staticmethod
     def _number(v):
-        try:
-            if pmt.is_integer(v):
-                return int(pmt.to_long(v))
+        """
+        Convert scalar PMT numeric values to Python numbers.
 
+        GNU Radio PMT uint64 values created by pmt::from_uint64()
+        are NOT reported by pmt.is_integer() in this Python binding.
+        Therefore unsigned conversion must be attempted explicitly.
+        """
+
+        #
+        # Real-valued metadata such as SNR, CFO and beta.
+        #
+        try:
             if pmt.is_real(v):
-                return float(pmt.to_double(v))
+                return float(
+                    pmt.to_double(v)
+                )
+        except Exception:
+            pass
+
+        #
+        # Unsigned integer metadata.
+        # Required for rf_sample_index created by pmt::from_uint64().
+        #
+        try:
+            return int(
+                pmt.to_uint64(v)
+            )
+        except Exception:
+            pass
+
+        #
+        # Signed integer fallback.
+        #
+        try:
+            return int(
+                pmt.to_long(v)
+            )
+        except Exception:
+            pass
+
+        #
+        # Generic Python scalar fallback.
+        #
+        try:
+            x = pmt.to_python(v)
+
+            if isinstance(
+                x,
+                (int, float),
+            ):
+                return x
         except Exception:
             pass
 
@@ -181,6 +230,19 @@ class decoded_csi_collector(gr.basic_block):
                 )
                 return
 
+            #
+            # Host-side packet reception timestamps.
+            #
+            # monotonic_ns:
+            #   Host callback timing for software/audit diagnostics.
+            #   NOT the primary RF/Doppler time base.
+            #
+            # wall_time_ns:
+            #   Absolute host clock for session audit/alignment only.
+            #
+            host_monotonic_ns = time.monotonic_ns()
+            host_wall_time_ns = time.time_ns()
+
             self.count += 1
 
             if self.bin_fh:
@@ -195,6 +257,15 @@ class decoded_csi_collector(gr.basic_block):
                 "abs_mean": float(
                     np.mean(np.abs(H))
                 ),
+                "host_monotonic_ns": int(
+                    host_monotonic_ns
+                ),
+                "host_wall_time_ns": int(
+                    host_wall_time_ns
+                ),
+                "timestamp_source": (
+                    "host_decoded_csi_handler"
+                ),
             }
 
             mapping = (
@@ -204,6 +275,10 @@ class decoded_csi_collector(gr.basic_block):
                 ("beta", self.key_beta),
                 ("encoding", self.key_encoding),
                 ("frame_bytes", self.key_frame_bytes),
+                (
+                    "rf_sample_index",
+                    self.key_rf_sample_index,
+                ),
             )
 
             for name, key in mapping:
