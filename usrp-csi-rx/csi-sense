@@ -6,6 +6,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+from tools.session_manager import SessionManager
+
 try:
     import yaml
 except ImportError:
@@ -340,6 +342,74 @@ def status():
     )
 
 
+
+def prepare_capture(
+    session_name,
+    mode="step",
+    trajectory="manual_step",
+):
+    print_header()
+
+    print()
+    print("[SESSION PREPARATION]")
+
+    manager = SessionManager(ROOT)
+
+    session_dir = manager.create_session(
+        session_name,
+        mode=mode,
+        trajectory=trajectory,
+    )
+
+    view_dir = (
+        session_dir
+        / "views"
+        / "view_000"
+    )
+
+    print(
+        "Session name :",
+        session_name
+    )
+
+    print(
+        "Mode         :",
+        mode
+    )
+
+    print(
+        "Trajectory   :",
+        trajectory
+    )
+
+    print(
+        "Session dir  :",
+        session_dir
+    )
+
+    print(
+        "Initial view :",
+        view_dir
+    )
+
+    print()
+    print(
+        "Session state: PREPARED"
+    )
+
+    print()
+    print(
+        "RF acquisition has NOT been started."
+    )
+
+    print(
+        "This command currently validates the "
+        "session/dataset orchestration layer only."
+    )
+
+    return 0
+
+
 def main():
 
     parser = argparse.ArgumentParser(
@@ -370,6 +440,35 @@ def main():
         help="Show unified configuration.",
     )
 
+    capture_parser = sub.add_parser(
+        "capture",
+        help="Prepare or run a CSI sensing capture session.",
+    )
+
+    capture_parser.add_argument(
+        "session_name",
+        help="Logical experiment/session name, e.g. room01.",
+    )
+
+    capture_parser.add_argument(
+        "--prepare",
+        action="store_true",
+        help="Prepare session and initial view without RF acquisition.",
+    )
+
+    capture_parser.add_argument(
+        "--mode",
+        choices=["step", "continuous"],
+        default="step",
+        help="Acquisition mode. Default: step.",
+    )
+
+    capture_parser.add_argument(
+        "--trajectory",
+        default="manual_step",
+        help="Trajectory config name. Default: manual_step.",
+    )
+
     args = parser.parse_args()
 
     if args.command == "doctor":
@@ -382,6 +481,33 @@ def main():
     if args.command == "config":
         show_config()
         return
+
+    if args.command == "capture":
+
+        if not args.prepare:
+            print_header()
+            print()
+            print("RF capture backend is not connected yet.")
+            print(
+                "For this milestone use:"
+            )
+            print(
+                f"  ./csi-sense capture "
+                f"{args.session_name} --prepare"
+            )
+            print()
+            print(
+                "No RF acquisition was started."
+            )
+            sys.exit(2)
+
+        sys.exit(
+            prepare_capture(
+                args.session_name,
+                mode=args.mode,
+                trajectory=args.trajectory,
+            )
+        )
 
 
 if __name__ == "__main__":
