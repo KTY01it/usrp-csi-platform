@@ -8,6 +8,12 @@ from pathlib import Path
 
 from tools.session_manager import SessionManager
 
+from tools.view_qc import (
+    evaluate_view,
+    update_view_manifest,
+    update_session_manifest,
+)
+
 try:
     import yaml
 except ImportError:
@@ -555,12 +561,102 @@ def capture_session(
         else "PASS"
     )
 
+    if dry_run:
+        print(
+            "Session:",
+            session_dir
+        )
+        return 0
+
+    print()
+    print("[VIEW QUALITY CONTROL]")
+
+    qc = evaluate_view(
+        ROOT,
+        view_dir,
+    )
+
+    update_view_manifest(
+        view_dir,
+        qc,
+    )
+
+    update_session_manifest(
+        session_dir,
+        "view_000",
+        qc,
+    )
+
+    print(
+        "TDM cycles    :",
+        qc[
+            "complete_tdm_cycles"
+        ]
+    )
+
+    print(
+        "Minimum       :",
+        qc[
+            "minimum_complete_tdm_cycles"
+        ]
+    )
+
+    print(
+        "Tensor shape  :",
+        qc[
+            "tensor_shape"
+        ]
+    )
+
+    print(
+        "TX mapping    :",
+        "PASS"
+        if qc[
+            "physical_tx_mapping_valid"
+        ]
+        else "FAIL"
+    )
+
+    print(
+        "Finite CSI    :",
+        "PASS"
+        if qc[
+            "all_links_finite"
+        ]
+        else "FAIL"
+    )
+
+    print()
+
+    if qc["accepted"]:
+        print(
+            "VIEW QUALITY : ACCEPTED"
+        )
+        print(
+            "Reason       : accepted"
+        )
+    else:
+        print(
+            "VIEW QUALITY : REJECTED"
+        )
+        print(
+            "Reason       :",
+            qc["reason"]
+        )
+
+    print()
+
     print(
         "Session:",
         session_dir
     )
 
-    return 0
+    #
+    # Important:
+    # backend succeeded even if scientific QC rejected the view.
+    # Use exit code 3 to distinguish this state.
+    #
+    return 0 if qc["accepted"] else 3
 
 
 def main():
