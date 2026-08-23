@@ -56,6 +56,118 @@ def map_52_to_fft_grid(x52):
     return grid
 
 
+
+def circular_delay_descriptors(
+    power,
+    peak_bin,
+):
+    """
+    power:
+        [N,TX,D]
+
+    peak_bin:
+        [N,TX]
+
+    Returns:
+        peak-relative centroid [N,TX]
+        circular RMS spread    [N,TX]
+
+    Delay-domain IFFT bins are periodic, so bin D-1
+    is adjacent to bin 0.
+    """
+
+    N, T, D = power.shape
+
+    centroid = np.full(
+        (N, T),
+        np.nan,
+        dtype=np.float64,
+    )
+
+    rms = np.full(
+        (N, T),
+        np.nan,
+        dtype=np.float64,
+    )
+
+    bins = np.arange(
+        D,
+        dtype=np.float64,
+    )
+
+    for n in range(N):
+        for t in range(T):
+
+            p = power[n, t].astype(
+                np.float64
+            )
+
+            total = np.sum(p)
+
+            if (
+                not np.isfinite(total)
+                or total <= 0
+            ):
+                continue
+
+            peak = int(
+                peak_bin[n, t]
+            )
+
+            delta = (
+                (
+                    bins
+                    - peak
+                    + D / 2.0
+                )
+                % D
+                - D / 2.0
+            )
+
+            mu = np.sum(
+                p * delta
+            ) / total
+
+            var = np.sum(
+                p
+                * (
+                    delta - mu
+                ) ** 2
+            ) / total
+
+            centroid[n, t] = mu
+
+            rms[n, t] = np.sqrt(
+                max(var, 0.0)
+            )
+
+    return centroid, rms
+
+
+def peak_prominence(power):
+    """
+    power:
+        [N,TX,D]
+    """
+
+    peak = np.max(
+        power,
+        axis=-1,
+    )
+
+    floor = np.median(
+        power,
+        axis=-1,
+    )
+
+    return (
+        peak
+        / (
+            floor
+            + 1e-12
+        )
+    ).astype(np.float32)
+
 def main():
     ap = argparse.ArgumentParser()
 
@@ -297,27 +409,14 @@ def main():
     ).astype(np.float64)
 
     #
-    # Profile centroids.
+    # ----------------------------------------------------
+    # Circular / peak-relative delay descriptors
+    # ----------------------------------------------------
     #
-    idx = np.arange(
-        args.n_delay,
-        dtype=np.float64,
-    )
-
-    centroid_complex = (
-        np.sum(
-            p_complex_norm * idx,
-            axis=-1,
-        )
-    ).astype(np.float32)
-
-    centroid_phase = (
-        np.sum(
-            p_phase_norm * idx,
-            axis=-1,
-        )
-    ).astype(np.float32)
-
+    # Delay-domain IFFT is periodic, therefore a linear
+    # centroid over [0,D-1] is not physically meaningful
+    # when a peak straddles the D-1 <-> 0 boundary.
+    #
     peak_complex = np.argmax(
         p_complex,
         axis=-1,
@@ -327,6 +426,75 @@ def main():
         p_phase,
         axis=-1,
     ).astype(np.int32)
+
+    (
+        centroid_complex,
+        rms_complex,
+    ) = circular_delay_descriptors(
+        p_complex_norm,
+        peak_complex,
+    )
+
+    (
+        centroid_phase,
+        rms_phase,
+    ) = circular_delay_descriptors(
+        p_phase_norm,
+        peak_phase,
+    )
+
+    prominence_complex = peak_prominence(
+        p_complex
+    )
+
+    prominence_phase = peak_prominence(
+        p_phase
+    )
+
+    #
+    # Validity here means usable delay-domain evidence,
+    # NOT valid physical ToF.
+    #
+    delay_evidence_valid = (
+        np.isfinite(
+            centroid_phase
+        )
+        & np.isfinite(
+            rms_phase
+        )
+        & np.isfinite(
+            prominence_phase
+        )
+    )
+
+    #
+    # TX0 has 52/52 calibrated carriers and passed the
+    # BG-vs-object validation. TX1 has only 24/52 valid
+    # carriers and remains auxiliary.
+    #
+    primary_tx = np.int32(0)
+
+    physical_tof_s = np.full(
+        (n_cycles, 2),
+        np.nan,
+        dtype=np.float64,
+    )
+
+    physical_tof_valid = np.zeros(
+        (n_cycles, 2),
+        dtype=bool,
+    )
+
+    absolute_range_m = np.full(
+        (n_cycles, 2),
+        np.nan,
+        dtype=np.float64,
+    )
+
+    absolute_range_valid = np.zeros(
+        (n_cycles, 2),
+        dtype=bool,
+    )
 
     if args.output is None:
         p = Path(args.rf_npz)
@@ -353,8 +521,49 @@ def main():
         peak_complex=peak_complex,
         peak_phase=peak_phase,
 
-        centroid_complex=centroid_complex,
-        centroid_phase=centroid_phase,
+        peak_relative_centroid_complex_bins=
+            centroid_complex.astype(np.float32),
+
+        peak_relative_centroid_phase_bins=
+            centroid_phase.astype(np.float32),
+
+        circular_rms_complex_bins=
+            rms_complex.astype(np.float32),
+
+        circular_rms_phase_bins=
+            rms_phase.astype(np.float32),
+
+        peak_prominence_complex=
+            prominence_complex,
+
+        peak_prominence_phase=
+            prominence_phase,
+
+        delay_evidence_valid=
+            delay_evidence_valid,
+
+        primary_tx=
+            primary_tx,
+
+        tx0_role=np.array(
+            "primary_phase_only_differential_delay"
+        ),
+
+        tx1_role=np.array(
+            "auxiliary_quality_gated"
+        ),
+
+        physical_tof_s=
+            physical_tof_s,
+
+        physical_tof_valid=
+            physical_tof_valid,
+
+        absolute_range_m=
+            absolute_range_m,
+
+        absolute_range_valid=
+            absolute_range_valid,
 
         fft_grid_complex_shifted=
             complex_grid_shifted,
@@ -401,7 +610,15 @@ def main():
         ),
 
         representation=np.array(
-            "inter_rx_differential_delay_profile"
+            "calibrated_inter_rx_differential_delay_evidence"
+        ),
+
+        preferred_representation=np.array(
+            "phase_only_TX0"
+        ),
+
+        validation_status=np.array(
+            "TX0_phase_only_BG_object_separation_pass"
         ),
 
         warning=np.array(
