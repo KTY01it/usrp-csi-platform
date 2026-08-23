@@ -32,3 +32,4 @@ Data*/
 Calib/
 .cache/
 .DS_Store
+sessions/
