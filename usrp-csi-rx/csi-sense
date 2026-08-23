@@ -343,6 +343,58 @@ def status():
 
 
 
+
+def run_rx_backend(
+    view_dir,
+    duration_s,
+    snr_min,
+    dry_run=False,
+):
+    backend = (
+        ROOT
+        / "scripts"
+        / "run_rx_tdm_view.sh"
+    )
+
+    if not backend.exists():
+        raise RuntimeError(
+            f"RX backend not found: {backend}"
+        )
+
+    csi_dir = (
+        Path(view_dir)
+        / "csi"
+    )
+
+    cmd = [
+        str(backend),
+        "--output",
+        str(csi_dir),
+        "--duration",
+        str(duration_s),
+        "--snr-min",
+        str(snr_min),
+    ]
+
+    if dry_run:
+        cmd.append("--dry-run")
+
+    print()
+    print("[RX BACKEND]")
+    print(
+        "Command      :",
+        " ".join(cmd)
+    )
+
+    result = subprocess.run(
+        cmd,
+        cwd=ROOT,
+    )
+
+    return result.returncode
+
+
+
 def prepare_capture(
     session_name,
     mode="step",
@@ -410,6 +462,107 @@ def prepare_capture(
     return 0
 
 
+
+def capture_session(
+    session_name,
+    mode="step",
+    trajectory="manual_step",
+    duration_s=None,
+    snr_min=10.0,
+    dry_run=False,
+):
+    print_header()
+
+    acquisition = load_yaml(
+        CONFIG_FILES["acquisition"]
+    )
+
+    if duration_s is None:
+        duration_s = acquisition[
+            "capture"
+        ][
+            "duration_s"
+        ]
+
+    manager = SessionManager(ROOT)
+
+    session_dir = manager.create_session(
+        session_name,
+        mode=mode,
+        trajectory=trajectory,
+    )
+
+    view_dir = (
+        session_dir
+        / "views"
+        / "view_000"
+    )
+
+    print()
+    print("[CAPTURE SESSION]")
+
+    print(
+        "Session      :",
+        session_dir
+    )
+
+    print(
+        "View         :",
+        view_dir
+    )
+
+    print(
+        "Mode         :",
+        mode
+    )
+
+    print(
+        "Duration     :",
+        duration_s,
+        "s"
+    )
+
+    print(
+        "SNR minimum  :",
+        snr_min,
+        "dB"
+    )
+
+    print(
+        "Dry run      :",
+        dry_run
+    )
+
+    status = run_rx_backend(
+        view_dir=view_dir,
+        duration_s=duration_s,
+        snr_min=snr_min,
+        dry_run=dry_run,
+    )
+
+    if status != 0:
+        print()
+        print(
+            "Capture backend: FAIL"
+        )
+        return status
+
+    print()
+    print(
+        "Capture backend:",
+        "DRY-RUN PASS"
+        if dry_run
+        else "PASS"
+    )
+
+    print(
+        "Session:",
+        session_dir
+    )
+
+    return 0
+
+
 def main():
 
     parser = argparse.ArgumentParser(
@@ -469,6 +622,26 @@ def main():
         help="Trajectory config name. Default: manual_step.",
     )
 
+    capture_parser.add_argument(
+        "--duration",
+        type=float,
+        default=None,
+        help="Capture duration in seconds. Default from acquisition.yaml.",
+    )
+
+    capture_parser.add_argument(
+        "--snr-min",
+        type=float,
+        default=10.0,
+        help="Minimum CSI SNR for TDM tensor construction.",
+    )
+
+    capture_parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Run complete orchestration without starting RF acquisition.",
+    )
+
     args = parser.parse_args()
 
     if args.command == "doctor":
@@ -484,28 +657,23 @@ def main():
 
     if args.command == "capture":
 
-        if not args.prepare:
-            print_header()
-            print()
-            print("RF capture backend is not connected yet.")
-            print(
-                "For this milestone use:"
+        if args.prepare:
+            sys.exit(
+                prepare_capture(
+                    args.session_name,
+                    mode=args.mode,
+                    trajectory=args.trajectory,
+                )
             )
-            print(
-                f"  ./csi-sense capture "
-                f"{args.session_name} --prepare"
-            )
-            print()
-            print(
-                "No RF acquisition was started."
-            )
-            sys.exit(2)
 
         sys.exit(
-            prepare_capture(
+            capture_session(
                 args.session_name,
                 mode=args.mode,
                 trajectory=args.trajectory,
+                duration_s=args.duration,
+                snr_min=args.snr_min,
+                dry_run=args.dry_run,
             )
         )
 
