@@ -14,6 +14,8 @@ from tools.view_qc import (
     update_session_manifest,
 )
 
+from tools.remote_tx_controller import RemoteTXController
+
 try:
     import yaml
 except ImportError:
@@ -476,6 +478,8 @@ def capture_session(
     duration_s=None,
     snr_min=10.0,
     dry_run=False,
+    remote_tx=True,
+    tx_interval_ms=100,
 ):
     print_header()
 
@@ -539,19 +543,97 @@ def capture_session(
         dry_run
     )
 
-    status = run_rx_backend(
-        view_dir=view_dir,
-        duration_s=duration_s,
-        snr_min=snr_min,
-        dry_run=dry_run,
-    )
+    tx = None
+    tx_started = False
 
-    if status != 0:
-        print()
-        print(
-            "Capture backend: FAIL"
+    try:
+
+        if remote_tx and not dry_run:
+
+            print()
+            print("[REMOTE TX]")
+
+            tx = RemoteTXController(
+                interval_ms=tx_interval_ms
+            )
+
+            if not tx.check_connection():
+                print(
+                    "Remote TX SSH : FAIL"
+                )
+                return 6
+
+            print(
+                "Remote TX SSH : PASS"
+            )
+
+            current = tx.status()
+
+            if current["running"]:
+                print(
+                    "Remote TX     : ALREADY RUNNING"
+                )
+                print(
+                    "PID           :",
+                    current["pid"]
+                )
+                return 7
+
+            print(
+                "Starting TX    :",
+                f"{tx_interval_ms} ms"
+            )
+
+            state = tx.start()
+
+            tx_started = True
+
+            print(
+                "Remote TX     : RUNNING"
+            )
+
+            print(
+                "PID           :",
+                state["pid"]
+            )
+
+        status = run_rx_backend(
+            view_dir=view_dir,
+            duration_s=duration_s,
+            snr_min=snr_min,
+            dry_run=dry_run,
         )
-        return status
+
+        if status != 0:
+            print()
+            print(
+                "Capture backend: FAIL"
+            )
+            return status
+
+    finally:
+
+        if tx is not None and tx_started:
+
+            print()
+            print("[REMOTE TX SHUTDOWN]")
+
+            try:
+                result = tx.stop()
+
+                print(
+                    "Remote TX     :",
+                    "STOPPED"
+                    if result["stopped"]
+                    else "STOP FAILED"
+                )
+
+            except Exception as exc:
+
+                print(
+                    "Remote TX stop error:",
+                    exc
+                )
 
     print()
     print(
@@ -738,6 +820,19 @@ def main():
         help="Run complete orchestration without starting RF acquisition.",
     )
 
+    capture_parser.add_argument(
+        "--no-remote-tx",
+        action="store_true",
+        help="Do not start/stop TX remotely. Use an externally managed TX.",
+    )
+
+    capture_parser.add_argument(
+        "--tx-interval-ms",
+        type=int,
+        default=100,
+        help="Remote TX packet interval in ms. Default: 100.",
+    )
+
     args = parser.parse_args()
 
     if args.command == "doctor":
@@ -770,6 +865,8 @@ def main():
                 duration_s=args.duration,
                 snr_min=args.snr_min,
                 dry_run=args.dry_run,
+                remote_tx=not args.no_remote_tx,
+                tx_interval_ms=args.tx_interval_ms,
             )
         )
 
