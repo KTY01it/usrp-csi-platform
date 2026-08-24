@@ -6,12 +6,16 @@ A two-machine software-defined radio platform for controlled WiFi-like CSI sensi
 
 ## 1. Quick start
 
-### 1.1 Branches and machine roles
+### 1.1 Production branch and machine roles
 
-Use the repository with two deployment branches:
+`main` is the canonical integrated production branch and contains both the RX/controller and TX implementations.
 
-- `rx-machine` -> receiver/controller computer
-- `tx-machine` -> transmitter computer
+The repository also retains the machine-specific branches for development history and traceability:
+
+- `rx-machine` -> RX/controller development branch
+- `tx-machine` -> TX development branch
+
+For production deployment, use `main` on both computers and run the appropriate subdirectory for each machine.
 
 Recommended local paths:
 
@@ -501,11 +505,21 @@ For reconstruction, collect multiple geometrically diverse views. Four instantan
 
 ## 8. Reproducibility and Git branches
 
-The production deployment is intentionally split by machine:
+`main` is the canonical integrated production version of the platform. It contains both the RX/controller and TX implementations.
 
-```text
-rx-machine -> RX/controller implementation
- tx-machine -> TX implementation
-```
+Repository layout:
 
-Dataset binaries and sessions are not committed to Git. Code, configuration templates, validation rules, and documentation are version controlled; experimental datasets remain local or should be published separately with their associated manifest/config snapshots.
+    usrp-csi-platform/
+    ├── usrp-csi-rx/    -> RX/controller implementation
+    ├── usrp-csi-tx/    -> TX implementation
+    ├── shared/          -> shared definitions/resources
+    └── README.md
+
+The machine-specific branches are retained for development traceability:
+
+    rx-machine -> RX/controller development branch
+    tx-machine -> TX development branch
+
+For a production experiment, both computers should use the same integrated `main` revision. Record the exact Git commit SHA used during data collection together with the generated session manifest and configuration snapshot.
+
+Dataset binaries and scan sessions are not committed to Git. Code, configuration templates, validation rules, and documentation are version controlled. Experimental datasets should remain local or be published separately together with their manifests, configuration snapshots, and software revision information.
