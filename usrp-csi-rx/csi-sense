@@ -720,6 +720,12 @@ def capture_view(
     tx = None
     tx_started = False
 
+    manager = SessionManager(ROOT)
+
+    manager.mark_capture_started(
+        view_dir
+    )
+
     try:
 
         if remote_tx and not dry_run:
@@ -816,6 +822,10 @@ def capture_view(
                     "Remote TX stop error:",
                     exc
                 )
+
+    manager.mark_capture_finished(
+        view_dir
+    )
 
     print()
 
@@ -942,6 +952,12 @@ def capture_view(
     if qc["accepted"]:
 
         run_view_feature_pipeline(
+            view_dir
+        )
+
+        manager = SessionManager(ROOT)
+
+        manager.update_view_artifacts(
             view_dir
         )
 
@@ -1372,6 +1388,306 @@ def run_view_feature_pipeline(
     return False
 
 
+def finalize_session(
+    session_dir,
+):
+    import json
+
+    session_dir = Path(
+        session_dir
+    ).resolve()
+
+    manifest_path = (
+        session_dir
+        / "manifest.json"
+    )
+
+    if not manifest_path.exists():
+        print(
+            "ERROR: session manifest missing:"
+        )
+        print(
+            manifest_path
+        )
+        return 2
+
+    print_header()
+
+    print()
+    print(
+        "[FINALIZE DATASET]"
+    )
+
+    print(
+        "Session:",
+        session_dir
+    )
+
+    steps = [
+        (
+            "dataset QC",
+            ROOT
+            / "tools"
+            / "validate_multiview_dataset.py",
+            [
+                str(session_dir),
+            ],
+        ),
+        (
+            "dataset index",
+            ROOT
+            / "tools"
+            / "build_multiview_dataset_index.py",
+            [
+                str(session_dir),
+            ],
+        ),
+        (
+            "global geometry",
+            ROOT
+            / "tools"
+            / "build_multiview_global_geometry.py",
+            [
+                str(session_dir),
+            ],
+        ),
+        (
+            "spatial fusion input",
+            ROOT
+            / "tools"
+            / "build_spatial_fusion_input.py",
+            [
+                str(session_dir),
+            ],
+        ),
+    ]
+
+    for (
+        label,
+        tool,
+        tool_args,
+    ) in steps:
+
+        print()
+        print(
+            f"[{label.upper()}]"
+        )
+
+        if not tool.exists():
+            print(
+                "FAIL: missing tool:",
+                tool
+            )
+            return 3
+
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(tool),
+                *tool_args,
+            ],
+            cwd=ROOT,
+        )
+
+        if result.returncode != 0:
+            print()
+            print(
+                "FINALIZATION: FAIL"
+            )
+
+            print(
+                "Failed step:",
+                label
+            )
+
+            return result.returncode
+
+    #
+    # Refresh artifact records for all accepted views.
+    #
+    manager = SessionManager(
+        ROOT
+    )
+
+    with open(
+        manifest_path,
+        "r",
+        encoding="utf-8",
+    ) as f:
+        manifest = json.load(f)
+
+    for item in manifest.get(
+        "views",
+        []
+    ):
+        view_dir = (
+            session_dir
+            / item["path"]
+        )
+
+        vm_path = (
+            view_dir
+            / "view_manifest.json"
+        )
+
+        if not vm_path.exists():
+            continue
+
+        with open(
+            vm_path,
+            "r",
+            encoding="utf-8",
+        ) as f:
+            vm = json.load(f)
+
+        if (
+            vm.get(
+                "quality",
+                {}
+            ).get(
+                "accepted"
+            )
+            is True
+        ):
+            manager.update_view_artifacts(
+                view_dir
+            )
+
+    #
+    # Final dataset state.
+    #
+    qc_path = (
+        session_dir
+        / "dataset_qc.json"
+    )
+
+    with open(
+        qc_path,
+        "r",
+        encoding="utf-8",
+    ) as f:
+        qc = json.load(f)
+
+    dataset_ready = bool(
+        qc.get(
+            "status"
+        )
+        ==
+        "PASS"
+        and
+        (
+            session_dir
+            / "dataset_index.npz"
+        ).exists()
+        and
+        (
+            session_dir
+            / "global_geometry.npz"
+        ).exists()
+        and
+        (
+            session_dir
+            / "spatial_fusion_input.npz"
+        ).exists()
+    )
+
+    with open(
+        manifest_path,
+        "r",
+        encoding="utf-8",
+    ) as f:
+        manifest = json.load(f)
+
+    manifest["status"] = (
+        "completed"
+        if dataset_ready
+        else "finalization_failed"
+    )
+
+    manifest[
+        "dataset_ready"
+    ] = dataset_ready
+
+    manifest[
+        "finalization"
+    ] = {
+        "dataset_qc_pass":
+            qc.get("status") == "PASS",
+
+        "dataset_index":
+            (
+                session_dir
+                / "dataset_index.npz"
+            ).exists(),
+
+        "global_geometry":
+            (
+                session_dir
+                / "global_geometry.npz"
+            ).exists(),
+
+        "spatial_fusion_input":
+            (
+                session_dir
+                / "spatial_fusion_input.npz"
+            ).exists(),
+
+        "absolute_aoa_valid":
+            False,
+
+        "absolute_aod_valid":
+            False,
+
+        "physical_tof_valid":
+            False,
+
+        "absolute_range_valid":
+            False,
+
+        "physical_doppler_valid":
+            False,
+    }
+
+    with open(
+        manifest_path,
+        "w",
+        encoding="utf-8",
+    ) as f:
+        json.dump(
+            manifest,
+            f,
+            indent=2,
+            ensure_ascii=False,
+        )
+
+    print()
+    print(
+        "=" * 62
+    )
+
+    print(
+        "FINALIZATION:",
+        "PASS"
+        if dataset_ready
+        else "FAIL"
+    )
+
+    print(
+        "DATASET READY:",
+        dataset_ready
+    )
+
+    print(
+        "=" * 62
+    )
+
+    return (
+        0
+        if dataset_ready
+        else 4
+    )
+
+
 def main():
 
     parser = argparse.ArgumentParser(
@@ -1462,6 +1778,22 @@ def main():
         type=int,
         default=100,
         help="Remote TX packet interval in ms. Default: 100.",
+    )
+
+
+    finalize_parser = sub.add_parser(
+        "finalize",
+        help=(
+            "Finalize and validate a completed "
+            "multi-view dataset."
+        ),
+    )
+
+    finalize_parser.add_argument(
+        "session_dir",
+        help=(
+            "Path to completed session directory."
+        ),
     )
 
 
@@ -1568,6 +1900,14 @@ def main():
                 dry_run=args.dry_run,
                 remote_tx=not args.no_remote_tx,
                 tx_interval_ms=args.tx_interval_ms,
+            )
+        )
+
+    if args.command == "finalize":
+
+        sys.exit(
+            finalize_session(
+                args.session_dir
             )
         )
 

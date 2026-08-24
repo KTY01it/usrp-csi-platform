@@ -556,3 +556,171 @@ class SessionManager:
                 indent=2,
                 ensure_ascii=False,
             )
+
+    def mark_capture_started(
+        self,
+        view_dir,
+    ):
+        view_dir = Path(view_dir).resolve()
+
+        p = (
+            view_dir
+            / "view_manifest.json"
+        )
+
+        with open(
+            p,
+            "r",
+            encoding="utf-8",
+        ) as f:
+            m = json.load(f)
+
+        m["capture"]["started_at"] = (
+            self._iso_time()
+        )
+
+        m["capture"]["finished_at"] = None
+        m["capture"]["duration_s"] = None
+
+        with open(
+            p,
+            "w",
+            encoding="utf-8",
+        ) as f:
+            json.dump(
+                m,
+                f,
+                indent=2,
+                ensure_ascii=False,
+            )
+
+    def mark_capture_finished(
+        self,
+        view_dir,
+    ):
+        view_dir = Path(view_dir).resolve()
+
+        p = (
+            view_dir
+            / "view_manifest.json"
+        )
+
+        with open(
+            p,
+            "r",
+            encoding="utf-8",
+        ) as f:
+            m = json.load(f)
+
+        finished = self._now()
+
+        started_text = (
+            m.get(
+                "capture",
+                {}
+            ).get(
+                "started_at"
+            )
+        )
+
+        duration = None
+
+        if started_text:
+            started = datetime.fromisoformat(
+                started_text
+            )
+
+            duration = (
+                finished - started
+            ).total_seconds()
+
+        m["capture"]["finished_at"] = (
+            finished.isoformat()
+        )
+
+        m["capture"]["duration_s"] = (
+            duration
+        )
+
+        with open(
+            p,
+            "w",
+            encoding="utf-8",
+        ) as f:
+            json.dump(
+                m,
+                f,
+                indent=2,
+                ensure_ascii=False,
+            )
+
+    def update_view_artifacts(
+        self,
+        view_dir,
+    ):
+        view_dir = Path(view_dir).resolve()
+
+        p = (
+            view_dir
+            / "view_manifest.json"
+        )
+
+        with open(
+            p,
+            "r",
+            encoding="utf-8",
+        ) as f:
+            m = json.load(f)
+
+        candidates = {
+            "tdm_tensor":
+                view_dir
+                / "csi"
+                / "H_raw_tdm_physical_2x2.npz",
+
+            "angular_features":
+                view_dir
+                / "features"
+                / "angular_features.npz",
+
+            "delay_features":
+                view_dir
+                / "features"
+                / "delay_features.npz",
+
+            "temporal_motion_features":
+                view_dir
+                / "features"
+                / "temporal_motion_features.npz",
+
+            "unified_sensing_features":
+                view_dir
+                / "features"
+                / "sensing_features.npz",
+        }
+
+        artifacts = {}
+
+        for name, path in candidates.items():
+            if path.exists():
+                artifacts[name] = str(
+                    path.relative_to(
+                        view_dir
+                    )
+                )
+
+        m["artifacts"] = artifacts
+
+        with open(
+            p,
+            "w",
+            encoding="utf-8",
+        ) as f:
+            json.dump(
+                m,
+                f,
+                indent=2,
+                ensure_ascii=False,
+            )
+
+        return artifacts
