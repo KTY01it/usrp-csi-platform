@@ -37,6 +37,7 @@ class csi_ltf_estimator(gr.sync_block):
                  meta_every_n=100,
                  sample_rate=None,          # Hz, để suy ra microseconds từ rx_time
                  sym_samps=80,               # số sample/OFDM symbol (20 MHz -> 80)
+                 require_tag=False,
                  ):           # ghi JSON thưa
         gr.sync_block.__init__(self,
             name="csi_ltf_estimator",
@@ -60,6 +61,14 @@ class csi_ltf_estimator(gr.sync_block):
         self.prev_vec = None
         self.sym_idx = 0
         self.corr_thresh = float(corr_thresh)
+        self.require_tag = bool(require_tag)
+
+        # Diagnostic: print only the first few FFT-domain tags.
+        self.debug_tags = bool(
+            int(os.environ.get("CSI_DEBUG_TAGS", "0"))
+        )
+        self.debug_tag_count = 0
+        self.debug_tag_limit = 80
 
         # Chống “mưa CSI”
         self.cooldown_syms = 160      # ~ mỗi khung 1 CSI
@@ -209,12 +218,58 @@ class csi_ltf_estimator(gr.sync_block):
                 self.sym_idx += 1
                 continue
 
+            # Diagnostic: inspect tags exactly at this FFT vector.
+            if self.debug_tags and self.debug_tag_count < self.debug_tag_limit:
+                abs_start_dbg = self.nitems_read(0)
+                dbg_tags = self.get_tags_in_range(
+                    0,
+                    abs_start_dbg + rel_idx,
+                    abs_start_dbg + rel_idx + 1,
+                )
+
+                for dbg_tag in dbg_tags:
+                    try:
+                        dbg_key = pmt.symbol_to_string(dbg_tag.key)
+                    except Exception:
+                        dbg_key = str(dbg_tag.key)
+
+                    amp_mean = float(np.mean(np.abs(v)))
+                    amp_max = float(np.max(np.abs(v)))
+
+                    print(
+                        "[CSI-TAG] "
+                        f"rx={self.rx_chan_id} "
+                        f"sym={self.sym_idx} "
+                        f"rel={rel_idx} "
+                        f"key={dbg_key} "
+                        f"offset={int(dbg_tag.offset)} "
+                        f"mean_abs={amp_mean:.6f} "
+                        f"max_abs={amp_max:.6f}"
+                    )
+
+                    self.debug_tag_count += 1
+
             # 2) Phát hiện LTF (ưu tiên tag; tương quan chỉ dự phòng)
             by_tag, tag = self._has_ltf_tag(rel_idx)
             by_corr, rho = (False, None)
-            if (not by_tag) and (self.prev_vec is not None):
-                by_corr, rho = self._looks_like_ltf_pair(self.prev_vec, v)
+
+            if (
+                (not self.require_tag)
+                and (not by_tag)
+                and (self.prev_vec is not None)
+            ):
+                by_corr, rho = self._looks_like_ltf_pair(
+                    self.prev_vec, v
+                )
+
             is_ltf_here = by_tag or by_corr
+
+            # Strict-tag mode:
+            # a sync tag marks the beginning of the L-LTF pair.
+            # The immediately following FFT vector is treated as LTF2;
+            # it does NOT need another tag.
+            if self.require_tag and self.seen_first_ltf:
+                is_ltf_here = True
 
             # 3) FSM: SEARCH → LTF1 → LTF2 → emit CSI → COOLDOWN
             if not self.seen_first_ltf:

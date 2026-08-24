@@ -1,0 +1,116 @@
+schema_version: 1
+coordinate_system:
+  name: room_local
+  unit: meter
+  convention:
+    x: horizontal room axis
+    y: horizontal room axis
+    z: vertical
+geometry_status:
+  measured: true
+  ready_for_absolute_spatial_processing: false
+tx_array:
+  device: USRP B210
+  array_local_coordinate_system:
+    origin: TX0 nominal physical antenna center
+    axis:
+      x: TX0_to_TX1
+      y: broadside_horizontal
+      z: vertical
+  antennas:
+    TX0:
+      xyz_m:
+      - 0.0
+      - 0.0
+      - 0.0
+      phase_center_measured: false
+    TX1:
+      xyz_m:
+      - 0.042
+      - 0.0
+      - 0.0
+      phase_center_measured: false
+  spacing_m: 0.042
+  spacing_measurement:
+    measured: true
+    type: physical_antenna_center_to_center
+    uncertainty_m: null
+    note: 42 mm measured TX0-to-TX1 physical antenna center-to-center spacing; RF
+      phase-center spacing not independently characterized
+  orientation:
+    antenna_elements: vertical_parallel
+    array_axis: TX0_to_TX1
+    broadside_axis: +y_array
+rx_array:
+  device: USRP B210
+  array_local_coordinate_system:
+    origin: RX0 approximate phase center
+    axis:
+      x: RX0_to_RX1
+      y: broadside_horizontal
+      z: vertical
+  antennas:
+    RX0:
+      xyz_m:
+      - 0.0
+      - 0.0
+      - 0.0
+      phase_center_measured: false
+    RX1:
+      xyz_m:
+      - 0.04
+      - 0.0
+      - 0.0
+      phase_center_measured: false
+  spacing_m: 0.04
+  spacing_measurement:
+    measured: true
+    type: physical_antenna_center_to_center
+    uncertainty_m: null
+    note: 40 mm physical spacing; effective RF phase-center spacing not independently
+      characterized
+  orientation:
+    antenna_elements: vertical_parallel
+    array_axis: RX0_to_RX1
+    broadside_axis: +y_array
+  aoa_convention:
+    zero_deg: broadside
+    positive_direction: toward_RX1_endfire_side
+    negative_direction: toward_RX0_endfire_side
+  spatial_aliasing:
+    present: true
+    reason: antenna spacing exceeds lambda/2 at 5.89 GHz
+    ideal_principal_branch_limit_deg: 39.51
+    note: This is the ideal two-element phase-ambiguity limit only; it does not validate
+      absolute AoA in multipath.
+reference_calibration:
+  capture: csi/simo_20260822_152716
+  reference_aoa_deg: 0.0
+  reference_direction: broadside
+  reference_direction_known: true
+  calibration_type: post_beta_relative_phase_reference
+  usable_for_pre_beta_absolute_aoa: false
+  note: This reference was built from post-beta CSI and must not be applied as an
+    absolute-AoA calibration for H_spatial_raw.
+platform_pose:
+  xyz_m: null
+  orientation_deg:
+    yaw: null
+    pitch: null
+    roll: null
+notes:
+- RX physical antenna center-to-center spacing measured as 40 mm; effective RF phase-center
+  spacing is not independently characterized.
+- RX antennas are vertically oriented and parallel.
+- Reference TX for simo_20260822_152716 was placed broadside to RX array.
+- Pre-beta H_spatial_raw provides validated angular RF evidence.
+- Closed-form absolute AoA using the ideal 40 mm two-element arcsin model failed physical
+  repeatability validation.
+- Absolute AoA remains disabled until a separately validated estimator/calibration
+  is available.
+- TX geometry and platform room pose are still not configured, so absolute AoD/backprojection
+  remain disabled.
+- TX physical antenna center-to-center spacing measured as 42 mm; effective RF phase-center
+  spacing is not independently characterized.
+- TX antennas are modeled as vertically oriented and parallel, with local +x from
+  TX0 to TX1.

@@ -1,0 +1,68 @@
+schema_version: 1
+
+platform:
+  name: usrp-b210-isac
+  description: "2x2 TDM MIMO-OFDM CSI communication and sensing platform"
+  hardware:
+    tx_device: "USRP B210"
+    rx_device: "USRP B210"
+
+rf:
+  center_frequency_hz: 5890000000
+  sample_rate_hz: 5000000
+  fft_size: 64
+  active_subcarriers: 52
+  subcarrier_spacing_hz: 78125.0
+  wavelength_m: 0.0508993986417657
+
+waveform:
+  standard: "IEEE 802.11 OFDM"
+  csi_source: "L-LTF"
+  encoding: 0
+  encoding_name: "BPSK 1/2"
+
+mimo:
+  mode: "packet_tdm_2x2"
+  tx_channels: [0, 1]
+  rx_channels: [0, 1]
+
+  physical_mapping:
+    even_packet: "TX0"
+    odd_packet: "TX1"
+
+  tensor:
+    order: ["cycle", "subcarrier", "rx", "tx"]
+    shape: ["N", 52, 2, 2]
+
+sensing:
+  primary_observable: "rx_differential_phase_tx0"
+
+  enabled_features:
+    - raw_csi
+    - calibrated_csi
+    - amplitude
+    - phase
+    - rx_differential_phase
+    - cross_tx_phase
+    - differential_delay_profile
+    - phase_curvature
+    - common_phase_aligned_csi
+
+  planned_features:
+    - aoa
+    - aod
+    - doppler
+    - micro_doppler
+    - cir_pdp
+    - delay_proxy
+    - spatial_likelihood
+
+scientific_limits:
+  absolute_aoa_validated: false
+  absolute_aod_validated: false
+  physical_tof_validated: false
+  radar_grade_range: false
+
+  notes:
+    - "Delay-related fields are coarse/proxy features at the current bandwidth."
+    - "TX0 RX-differential phase is currently the strongest validated observable."

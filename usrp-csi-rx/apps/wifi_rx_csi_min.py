@@ -27,6 +27,7 @@ from gnuradio import qtgui
 from gnuradio.filter import firdes
 import sip
 from gnuradio import blocks
+from gnuradio import pdu
 from gnuradio import fft
 from gnuradio.fft import window
 from gnuradio import gr
@@ -41,6 +42,7 @@ import time
 from gnuradio.qtgui import Range, RangeWidget
 from PyQt5 import QtCore
 import ieee802_11
+from csi_ltf_estimator import csi_ltf_estimator
 
 
 
@@ -297,9 +299,24 @@ class wifi_rx(gr.top_block, Qt.QWidget):
         self.blocks_complex_to_mag_0 = blocks.complex_to_mag(1)
 
 
+
+        ##################################################
+        # SISO CSI minimal logger
+        ##################################################
+        self.csi_dir = os.environ.get("RX_CSI_DIR", "csi")
+        os.makedirs(self.csi_dir, exist_ok=True)
+        self.csi_bin_path = os.path.join(self.csi_dir, "csi_ch0.bin")
+        self.csi_est0 = csi_ltf_estimator(ltf_tag_keys=("ofdm_start", "wifi_start"))
+        self.csi_sink0 = blocks.file_sink(gr.sizeof_gr_complex, self.csi_bin_path)
+        self.pdu2ts0 = pdu.pdu_to_tagged_stream(gr.types.complex_t, "packet_len")
+        print("[CSI-MIN] CSI output:", self.csi_bin_path)
+
         ##################################################
         # Connections
         ##################################################
+        self.connect((self.fft_vxx_0, 0), (self.csi_est0, 0))
+        self.msg_connect((self.csi_est0, 'csi'), (self.pdu2ts0, 'pdus'))
+        self.connect((self.pdu2ts0, 0), (self.csi_sink0, 0))
         self.connect((self.uhd_usrp_source_0, 0), (self.blocks_file_sink_raw_iq, 0))
         self.msg_connect((self.ieee802_11_decode_mac_0, 'out'), (self.ieee802_11_parse_mac_0, 'in'))
         self.msg_connect((self.ieee802_11_frame_equalizer_0, 'symbols'), (self.pdu_pdu_to_tagged_stream_0, 'pdus'))

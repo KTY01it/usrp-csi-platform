@@ -27,6 +27,7 @@ from gnuradio import qtgui
 from gnuradio.filter import firdes
 import sip
 from gnuradio import blocks
+from gnuradio import pdu
 from gnuradio import fft
 from gnuradio.fft import window
 from gnuradio import gr
@@ -41,6 +42,10 @@ import time
 from gnuradio.qtgui import Range, RangeWidget
 from PyQt5 import QtCore
 import ieee802_11
+from csi_ltf_estimator import csi_ltf_estimator
+from csi_tag_collector import csi_tag_collector
+from mac_seq_tap import mac_seq_tap
+from decoded_csi_collector import decoded_csi_collector
 
 
 
@@ -175,14 +180,16 @@ class wifi_rx(gr.top_block, Qt.QWidget):
             uhd.stream_args(
                 cpu_format="fc32",
                 args='',
-                channels=list(range(0,1)),
+                channels=[0, 1],
             ),
         )
         self.uhd_usrp_source_0.set_samp_rate(samp_rate)
         self.uhd_usrp_source_0.set_time_unknown_pps(uhd.time_spec(0))
 
         self.uhd_usrp_source_0.set_center_freq(uhd.tune_request(freq, rf_freq = freq - lo_offset, rf_freq_policy=uhd.tune_request.POLICY_MANUAL), 0)
+        self.uhd_usrp_source_0.set_center_freq(uhd.tune_request(freq, rf_freq = freq - lo_offset, rf_freq_policy=uhd.tune_request.POLICY_MANUAL), 1)
         self.uhd_usrp_source_0.set_normalized_gain(gain, 0)
+        self.uhd_usrp_source_0.set_normalized_gain(gain, 1)
         self.blocks_file_sink_raw_iq = blocks.file_sink(
             gr.sizeof_gr_complex*1,
             raw_iq_output,
@@ -284,8 +291,38 @@ class wifi_rx(gr.top_block, Qt.QWidget):
         self.ieee802_11_parse_mac_0 = ieee802_11.parse_mac(False, True)
         self.ieee802_11_frame_equalizer_0 = ieee802_11.frame_equalizer(ieee802_11.Equalizer(chan_est), freq, samp_rate, False, False)
         self.ieee802_11_decode_mac_0 = ieee802_11.decode_mac(True, False)
+
+        # Separate decoder for RX1 so that both receive chains
+        # obtain their own packet sequence numbers.
+        self.ieee802_11_decode_mac_1 = ieee802_11.decode_mac(False, False)
         self.fft_vxx_0 = fft.fft_vcc(64, True, window.rectangular(64), True, 1)
         self.blocks_stream_to_vector_0 = blocks.stream_to_vector(gr.sizeof_gr_complex*1, 64)
+
+        # Optional tag diagnostics.
+        self.debug_pipeline_tags = bool(
+            int(os.environ.get("CSI_DEBUG_PIPELINE_TAGS", "0"))
+        )
+
+        if self.debug_pipeline_tags:
+            self.tagdbg_sync0 = blocks.tag_debug(
+                gr.sizeof_gr_complex,
+                "TAG-SYNC0",
+                ""
+            )
+            self.tagdbg_vec0 = blocks.tag_debug(
+                gr.sizeof_gr_complex * 64,
+                "TAG-VEC0",
+                ""
+            )
+            self.tagdbg_fft0 = blocks.tag_debug(
+                gr.sizeof_gr_complex * 64,
+                "TAG-FFT0",
+                ""
+            )
+
+            self.tagdbg_sync0.set_display(True)
+            self.tagdbg_vec0.set_display(True)
+            self.tagdbg_fft0.set_display(True)
         self.blocks_multiply_xx_0 = blocks.multiply_vcc(1)
         self.blocks_moving_average_xx_1 = blocks.moving_average_cc(window_size, 1, 4000, 1)
         self.blocks_moving_average_xx_0 = blocks.moving_average_ff(window_size  + 16, 1, 4000, 1)
@@ -296,12 +333,231 @@ class wifi_rx(gr.top_block, Qt.QWidget):
         self.blocks_complex_to_mag_squared_0 = blocks.complex_to_mag_squared(1)
         self.blocks_complex_to_mag_0 = blocks.complex_to_mag(1)
 
+        ##################################################
+        # SIMO stage-1: channel-1 WiFi sync/FFT/CSI chain
+        ##################################################
+        self.ieee802_11_sync_short_1 = ieee802_11.sync_short(0.56, 2, False, False)
+        self.ieee802_11_sync_long_1 = ieee802_11.sync_long(sync_length, False, False)
+        self.fft_vxx_1 = fft.fft_vcc(64, True, window.rectangular(64), True, 1)
+
+        # RX1 equalizer solely for official LS CSI extraction.
+        self.ieee802_11_frame_equalizer_1 = (
+            ieee802_11.frame_equalizer(
+                ieee802_11.Equalizer(chan_est),
+                freq,
+                samp_rate,
+                False,
+                False,
+            )
+        )
+        self.blocks_stream_to_vector_1 = blocks.stream_to_vector(gr.sizeof_gr_complex*1, 64)
+
+        if self.debug_pipeline_tags:
+            self.tagdbg_sync1 = blocks.tag_debug(
+                gr.sizeof_gr_complex,
+                "TAG-SYNC1",
+                ""
+            )
+            self.tagdbg_vec1 = blocks.tag_debug(
+                gr.sizeof_gr_complex * 64,
+                "TAG-VEC1",
+                ""
+            )
+            self.tagdbg_fft1 = blocks.tag_debug(
+                gr.sizeof_gr_complex * 64,
+                "TAG-FFT1",
+                ""
+            )
+
+            self.tagdbg_sync1.set_display(True)
+            self.tagdbg_vec1.set_display(True)
+            self.tagdbg_fft1.set_display(True)
+        self.blocks_multiply_xx_1 = blocks.multiply_vcc(1)
+        self.blocks_moving_average_xx_3 = blocks.moving_average_cc(window_size, 1, 4000, 1)
+        self.blocks_moving_average_xx_2 = blocks.moving_average_ff(window_size + 16, 1, 4000, 1)
+        self.blocks_divide_xx_1 = blocks.divide_ff(1)
+        self.blocks_delay_1_0 = blocks.delay(gr.sizeof_gr_complex*1, 16)
+        self.blocks_delay_1 = blocks.delay(gr.sizeof_gr_complex*1, sync_length)
+        self.blocks_conjugate_cc_1 = blocks.conjugate_cc()
+        self.blocks_complex_to_mag_squared_1 = blocks.complex_to_mag_squared(1)
+        self.blocks_complex_to_mag_1 = blocks.complex_to_mag(1)
+
+
+
+        ##################################################
+        # SISO CSI minimal logger
+        ##################################################
+        self.csi_dir = os.environ.get("RX_CSI_DIR", "csi")
+        os.makedirs(self.csi_dir, exist_ok=True)
+        self.csi_bin_path = os.path.join(self.csi_dir, "csi_ch0.bin")
+        self.csi_est0 = csi_ltf_estimator(
+            ltf_tag_keys=("ofdm_start", "wifi_start"),
+            rx_chan_id=0,
+            sample_rate=samp_rate,
+            require_tag=True,
+        )
+        self.csi_sink0 = blocks.file_sink(gr.sizeof_gr_complex, self.csi_bin_path)
+        self.pdu2ts0 = pdu.pdu_to_tagged_stream(gr.types.complex_t, "packet_len")
+        self.csi_bin_path1 = os.path.join(self.csi_dir, "csi_ch1.bin")
+        self.csi_est1 = csi_ltf_estimator(
+            ltf_tag_keys=("ofdm_start", "wifi_start"),
+            rx_chan_id=1,
+            sample_rate=samp_rate,
+            require_tag=True,
+        )
+        self.csi_sink1 = blocks.file_sink(gr.sizeof_gr_complex, self.csi_bin_path1)
+        self.pdu2ts1 = pdu.pdu_to_tagged_stream(gr.types.complex_t, "packet_len")
+        print("[CSI-SIMO-STAGE1] CSI output ch0:", self.csi_bin_path)
+        print("[CSI-SIMO-STAGE1] CSI output ch1:", self.csi_bin_path1)
+
+        ##################################################
+        # SIMO stage-0: consume RX channel 1
+        ##################################################
+        self.blocks_null_sink_ch1 = blocks.null_sink(gr.sizeof_gr_complex)
+        print("[CSI-SIMO-STAGE1] UHD RX channels enabled: [0, 1]")
+        print("[CSI-SIMO-STAGE1] ch0: WiFi decode + CSI")
+        print("[CSI-SIMO-STAGE1] ch1: full WiFi sync/FFT/CSI path")
+
+        ##################################################
+        # Official frame_equalizer LS CSI collectors
+        ##################################################
+
+        self.csi_eq_bin0 = os.path.join(
+            self.csi_dir,
+            "csi_eq_ch0.bin",
+        )
+
+        self.csi_eq_meta0 = os.path.join(
+            self.csi_dir,
+            "csi_eq_ch0.jsonl",
+        )
+
+        self.csi_eq_collector0 = csi_tag_collector(
+            rx_chan=0,
+            bin_path=self.csi_eq_bin0,
+            meta_path=self.csi_eq_meta0,
+        )
+
+        self.csi_eq_bin1 = os.path.join(
+            self.csi_dir,
+            "csi_eq_ch1.bin",
+        )
+
+        self.csi_eq_meta1 = os.path.join(
+            self.csi_dir,
+            "csi_eq_ch1.jsonl",
+        )
+
+        self.csi_eq_collector1 = csi_tag_collector(
+            rx_chan=1,
+            bin_path=self.csi_eq_bin1,
+            meta_path=self.csi_eq_meta1,
+        )
+
+        print(
+            "[CSI-EQ] official LS CSI ch0:",
+            self.csi_eq_bin0,
+        )
+
+        print(
+            "[CSI-EQ] official LS CSI ch1:",
+            self.csi_eq_bin1,
+        )
+
+        ##################################################
+        # MAC sequence taps
+        ##################################################
+
+        self.mac_seq0 = []
+
+        self.mac_seq1 = []
+
+        def _seq0_cb(seq):
+            self.mac_seq0.append(int(seq))
+
+        def _seq1_cb(seq):
+            self.mac_seq1.append(int(seq))
+
+        self.mac_seq_tap0 = mac_seq_tap(
+            rx_chan=0,
+            callback=_seq0_cb,
+        )
+
+        self.mac_seq_tap1 = mac_seq_tap(
+            rx_chan=1,
+            callback=_seq1_cb,
+        )
+
+        ##################################################
+        # CRC-valid decoded packet CSI collectors
+        ##################################################
+
+        self.csi_pdu_collector0 = decoded_csi_collector(
+            rx_chan=0,
+            bin_path=os.path.join(
+                self.csi_dir,
+                "csi_pdu_ch0.bin",
+            ),
+            spatial_bin_path=os.path.join(
+                self.csi_dir,
+                "csi_spatial_pdu_ch0.bin",
+            ),
+            meta_path=os.path.join(
+                self.csi_dir,
+                "csi_pdu_ch0.jsonl",
+            ),
+        )
+
+        self.csi_pdu_collector1 = decoded_csi_collector(
+            rx_chan=1,
+            bin_path=os.path.join(
+                self.csi_dir,
+                "csi_pdu_ch1.bin",
+            ),
+            spatial_bin_path=os.path.join(
+                self.csi_dir,
+                "csi_spatial_pdu_ch1.bin",
+            ),
+            meta_path=os.path.join(
+                self.csi_dir,
+                "csi_pdu_ch1.jsonl",
+            ),
+        )
 
         ##################################################
         # Connections
         ##################################################
+        self.connect((self.fft_vxx_0, 0), (self.csi_est0, 0))
+        self.msg_connect((self.csi_est0, 'csi'), (self.pdu2ts0, 'pdus'))
+        self.connect((self.pdu2ts0, 0), (self.csi_sink0, 0))
+        self.connect((self.fft_vxx_1, 0), (self.csi_est1, 0))
+        self.msg_connect((self.csi_est1, 'csi'), (self.pdu2ts1, 'pdus'))
+        self.connect((self.pdu2ts1, 0), (self.csi_sink1, 0))
         self.connect((self.uhd_usrp_source_0, 0), (self.blocks_file_sink_raw_iq, 0))
-        self.msg_connect((self.ieee802_11_decode_mac_0, 'out'), (self.ieee802_11_parse_mac_0, 'in'))
+        self.msg_connect(
+            (self.ieee802_11_decode_mac_0, 'out'),
+            (self.ieee802_11_parse_mac_0, 'in')
+        )
+
+        self.msg_connect(
+            (self.ieee802_11_decode_mac_0, 'out'),
+            (self.mac_seq_tap0, 'in')
+        )
+
+        self.msg_connect(
+            (self.ieee802_11_decode_mac_1, 'out'),
+            (self.mac_seq_tap1, 'in')
+        )
+
+        self.msg_connect(
+            (self.ieee802_11_decode_mac_0, 'out'),
+            (self.csi_pdu_collector0, 'in')
+        )
+
+        self.msg_connect(
+            (self.ieee802_11_decode_mac_1, 'out'),
+            (self.csi_pdu_collector1, 'in')
+        )
         self.msg_connect((self.ieee802_11_frame_equalizer_0, 'symbols'), (self.pdu_pdu_to_tagged_stream_0, 'pdus'))
         self.connect((self.blocks_complex_to_mag_0, 0), (self.blocks_divide_xx_0, 0))
         self.connect((self.blocks_complex_to_mag_squared_0, 0), (self.blocks_moving_average_xx_0, 0))
@@ -321,10 +577,84 @@ class wifi_rx(gr.top_block, Qt.QWidget):
         self.connect((self.ieee802_11_sync_long_0, 0), (self.blocks_stream_to_vector_0, 0))
         self.connect((self.ieee802_11_sync_short_0, 0), (self.blocks_delay_0, 0))
         self.connect((self.ieee802_11_sync_short_0, 0), (self.ieee802_11_sync_long_0, 0))
+
+        ##################################################
+        # SIMO stage-1 channel-1 connections
+        ##################################################
+        self.connect((self.uhd_usrp_source_0, 1), (self.blocks_complex_to_mag_squared_1, 0))
+        self.connect((self.uhd_usrp_source_0, 1), (self.blocks_delay_1_0, 0))
+        self.connect((self.uhd_usrp_source_0, 1), (self.blocks_multiply_xx_1, 0))
+        self.connect((self.blocks_complex_to_mag_squared_1, 0), (self.blocks_moving_average_xx_2, 0))
+        self.connect((self.blocks_delay_1_0, 0), (self.blocks_conjugate_cc_1, 0))
+        self.connect((self.blocks_delay_1_0, 0), (self.ieee802_11_sync_short_1, 0))
+        self.connect((self.blocks_conjugate_cc_1, 0), (self.blocks_multiply_xx_1, 1))
+        self.connect((self.blocks_multiply_xx_1, 0), (self.blocks_moving_average_xx_3, 0))
+        self.connect((self.blocks_moving_average_xx_3, 0), (self.blocks_complex_to_mag_1, 0))
+        self.connect((self.blocks_complex_to_mag_1, 0), (self.blocks_divide_xx_1, 0))
+        self.connect((self.blocks_moving_average_xx_2, 0), (self.blocks_divide_xx_1, 1))
+        self.connect((self.blocks_divide_xx_1, 0), (self.ieee802_11_sync_short_1, 2))
+        self.connect((self.blocks_moving_average_xx_3, 0), (self.ieee802_11_sync_short_1, 1))
+        self.connect((self.ieee802_11_sync_short_1, 0), (self.blocks_delay_1, 0))
+        self.connect((self.ieee802_11_sync_short_1, 0), (self.ieee802_11_sync_long_1, 0))
+        self.connect((self.blocks_delay_1, 0), (self.ieee802_11_sync_long_1, 1))
+        self.connect((self.ieee802_11_sync_long_1, 0), (self.blocks_stream_to_vector_1, 0))
+        self.connect((self.blocks_stream_to_vector_1, 0), (self.fft_vxx_1, 0))
+
+        # RX1 official frame equalizer.
+        self.connect(
+            (self.fft_vxx_1, 0),
+            (self.ieee802_11_frame_equalizer_1, 0)
+        )
+
+        self.connect(
+            (self.ieee802_11_frame_equalizer_1, 0),
+            (self.ieee802_11_decode_mac_1, 0)
+        )
         self.connect((self.pdu_pdu_to_tagged_stream_0, 0), (self.qtgui_const_sink_x_0, 0))
         self.connect((self.uhd_usrp_source_0, 0), (self.blocks_complex_to_mag_squared_0, 0))
         self.connect((self.uhd_usrp_source_0, 0), (self.blocks_delay_0_0, 0))
         self.connect((self.uhd_usrp_source_0, 0), (self.blocks_multiply_xx_0, 0))
+
+        # Official frame_equalizer LS CSI tag collectors.
+        self.connect(
+            (self.ieee802_11_frame_equalizer_0, 0),
+            (self.csi_eq_collector0, 0)
+        )
+
+        self.connect(
+            (self.ieee802_11_frame_equalizer_1, 0),
+            (self.csi_eq_collector1, 0)
+        )
+
+        # Diagnostic fan-outs only. They do not alter the normal RX path.
+        if self.debug_pipeline_tags:
+            self.connect(
+                (self.ieee802_11_sync_long_0, 0),
+                (self.tagdbg_sync0, 0)
+            )
+            self.connect(
+                (self.blocks_stream_to_vector_0, 0),
+                (self.tagdbg_vec0, 0)
+            )
+            self.connect(
+                (self.fft_vxx_0, 0),
+                (self.tagdbg_fft0, 0)
+            )
+
+            self.connect(
+                (self.ieee802_11_sync_long_1, 0),
+                (self.tagdbg_sync1, 0)
+            )
+            self.connect(
+                (self.blocks_stream_to_vector_1, 0),
+                (self.tagdbg_vec1, 0)
+            )
+            self.connect(
+                (self.fft_vxx_1, 0),
+                (self.tagdbg_fft1, 0)
+            )
+
+            print("[TAG-DIAG] pipeline tag debugging enabled")
 
 
     def closeEvent(self, event):
@@ -367,6 +697,7 @@ class wifi_rx(gr.top_block, Qt.QWidget):
         self.lo_offset = lo_offset
         self._lo_offset_callback(self.lo_offset)
         self.uhd_usrp_source_0.set_center_freq(uhd.tune_request(self.freq, rf_freq = self.freq - self.lo_offset, rf_freq_policy=uhd.tune_request.POLICY_MANUAL), 0)
+        self.uhd_usrp_source_0.set_center_freq(uhd.tune_request(self.freq, rf_freq = self.freq - self.lo_offset, rf_freq_policy=uhd.tune_request.POLICY_MANUAL), 1)
 
     def get_gain(self):
         return self.gain
@@ -374,6 +705,7 @@ class wifi_rx(gr.top_block, Qt.QWidget):
     def set_gain(self, gain):
         self.gain = gain
         self.uhd_usrp_source_0.set_normalized_gain(self.gain, 0)
+        self.uhd_usrp_source_0.set_normalized_gain(self.gain, 1)
 
     def get_freq(self):
         return self.freq
@@ -383,6 +715,7 @@ class wifi_rx(gr.top_block, Qt.QWidget):
         self._freq_callback(self.freq)
         self.ieee802_11_frame_equalizer_0.set_frequency(self.freq)
         self.uhd_usrp_source_0.set_center_freq(uhd.tune_request(self.freq, rf_freq = self.freq - self.lo_offset, rf_freq_policy=uhd.tune_request.POLICY_MANUAL), 0)
+        self.uhd_usrp_source_0.set_center_freq(uhd.tune_request(self.freq, rf_freq = self.freq - self.lo_offset, rf_freq_policy=uhd.tune_request.POLICY_MANUAL), 1)
 
     def get_chan_est(self):
         return self.chan_est

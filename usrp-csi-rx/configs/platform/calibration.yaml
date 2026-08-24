@@ -1,0 +1,34 @@
+schema_version: 1
+
+active_profile:
+  id: "CAL_20260823_5890M_5M"
+
+  rf:
+    center_frequency_hz: 5890000000
+    sample_rate_hz: 5000000
+
+  reference:
+    capture:
+      "csi/simo_20260822_152716"
+
+    calibration_file:
+      "csi/simo_20260822_152716/mimo_reference_calibration.npz"
+
+  background:
+    capture:
+      "csi/simo_20260822_214535"
+
+    model_file:
+      "csi/simo_20260822_214535/mimo_background_model.npz"
+
+  validated:
+    physical_tdm_mapping: true
+    rx_diff_tx0: true
+    quality_masking: true
+    background_model: true
+
+    absolute_aoa: false
+    absolute_aod: false
+    physical_tof: false
+
+  status: "research_validated_controlled_geometry"

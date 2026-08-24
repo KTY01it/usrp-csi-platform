@@ -1,0 +1,22 @@
+schema_version: 1
+
+coordinate_system: room_local
+
+grid:
+  x_min_m: 0.5
+  x_max_m: 1.5
+
+  y_min_m: -0.5
+  y_max_m: 0.8
+
+  z_min_m: 0.5
+  z_max_m: 1.8
+
+  step_m: 0.10
+
+semantics:
+  type: geometric_candidate_grid
+
+  note: >
+    Candidate points are geometric hypotheses only.
+    They are not targets, labels, ranges, or ToF measurements.

@@ -18,6 +18,11 @@ logs/*.log
 data/*
 !data/.gitkeep
 
+usrp-csi-rx/data/*
+!usrp-csi-rx/data/.gitkeep
+usrp-csi-rx/logs/*
+!usrp-csi-rx/logs/.gitkeep
+
 *.dat
 *.bin
 *.c64
@@ -37,3 +42,5 @@ usrp-csi-tx/data/*
 !usrp-csi-tx/data/.gitkeep
 usrp-csi-tx/logs/*
 !usrp-csi-tx/logs/.gitkeep
+# Local RF captures and calibration data
+usrp-csi-rx/csi/

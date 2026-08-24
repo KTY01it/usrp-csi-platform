@@ -1,0 +1,419 @@
+#!/usr/bin/env python3
+
+import os
+import json
+import time
+import numpy as np
+import pmt
+from gnuradio import gr
+
+
+class decoded_csi_collector(gr.basic_block):
+    """
+    Receive CRC-valid decoded MAC PDUs.
+
+    decode_mac preserves frame_equalizer metadata, including CSI.
+    Therefore each record contains CSI and MAC sequence number
+    belonging to the SAME packet.
+    """
+
+    def __init__(
+        self,
+        rx_chan=0,
+        bin_path=None,
+        spatial_bin_path=None,
+        meta_path=None,
+    ):
+        gr.basic_block.__init__(
+            self,
+            name=f"decoded_csi_collector_rx{rx_chan}",
+            in_sig=None,
+            out_sig=None,
+        )
+
+        self.rx_chan = int(rx_chan)
+        self.bin_path = bin_path
+        self.spatial_bin_path = spatial_bin_path
+        self.meta_path = meta_path
+
+        self.key_csi = pmt.intern("csi")
+        self.key_csi_spatial = pmt.intern(
+            "csi_spatial_raw"
+        )
+        self.key_snr = pmt.intern("snr")
+        self.key_freq = pmt.intern("nominal frequency")
+        self.key_foff = pmt.intern("frequency offset")
+        self.key_beta = pmt.intern("beta")
+        self.key_encoding = pmt.intern("encoding")
+        self.key_frame_bytes = pmt.intern("frame bytes")
+        self.key_rf_sample_index = pmt.intern(
+            "rf_sample_index"
+        )
+
+        self.count = 0
+
+        self.bin_fh = None
+        self.spatial_bin_fh = None
+        self.meta_fh = None
+
+        if self.bin_path:
+            os.makedirs(
+                os.path.dirname(self.bin_path),
+                exist_ok=True,
+            )
+            self.bin_fh = open(
+                self.bin_path,
+                "wb",
+            )
+
+        if self.spatial_bin_path:
+            os.makedirs(
+                os.path.dirname(
+                    self.spatial_bin_path
+                ),
+                exist_ok=True,
+            )
+            self.spatial_bin_fh = open(
+                self.spatial_bin_path,
+                "wb",
+            )
+
+        if self.meta_path:
+            os.makedirs(
+                os.path.dirname(self.meta_path),
+                exist_ok=True,
+            )
+            self.meta_fh = open(
+                self.meta_path,
+                "w",
+                buffering=1,
+            )
+
+        self.message_port_register_in(
+            pmt.intern("in")
+        )
+
+        self.set_msg_handler(
+            pmt.intern("in"),
+            self._handle,
+        )
+
+    @staticmethod
+    def _number(v):
+        """
+        Convert scalar PMT numeric values to Python numbers.
+
+        GNU Radio PMT uint64 values created by pmt::from_uint64()
+        are NOT reported by pmt.is_integer() in this Python binding.
+        Therefore unsigned conversion must be attempted explicitly.
+        """
+
+        #
+        # Real-valued metadata such as SNR, CFO and beta.
+        #
+        try:
+            if pmt.is_real(v):
+                return float(
+                    pmt.to_double(v)
+                )
+        except Exception:
+            pass
+
+        #
+        # Unsigned integer metadata.
+        # Required for rf_sample_index created by pmt::from_uint64().
+        #
+        try:
+            return int(
+                pmt.to_uint64(v)
+            )
+        except Exception:
+            pass
+
+        #
+        # Signed integer fallback.
+        #
+        try:
+            return int(
+                pmt.to_long(v)
+            )
+        except Exception:
+            pass
+
+        #
+        # Generic Python scalar fallback.
+        #
+        try:
+            x = pmt.to_python(v)
+
+            if isinstance(
+                x,
+                (int, float),
+            ):
+                return x
+        except Exception:
+            pass
+
+        return None
+
+    @staticmethod
+    def _payload_bytes(data):
+        """
+        Support both PMT blob and u8vector forms.
+        """
+        try:
+            if pmt.is_u8vector(data):
+                return bytes(
+                    bytearray(
+                        pmt.u8vector_elements(data)
+                    )
+                )
+        except Exception:
+            pass
+
+        try:
+            obj = pmt.to_python(data)
+
+            if isinstance(
+                obj,
+                (bytes, bytearray, memoryview),
+            ):
+                return bytes(obj)
+
+            # Some PMT versions expose blob as ndarray/buffer-like.
+            try:
+                return bytes(obj)
+            except Exception:
+                pass
+        except Exception:
+            pass
+
+        return None
+
+    @staticmethod
+    def _seq_from_mac(raw):
+        if raw is None or len(raw) < 24:
+            return None
+
+        seq_ctrl = (
+            int(raw[22])
+            | (int(raw[23]) << 8)
+        )
+
+        return (seq_ctrl >> 4) & 0x0FFF
+
+    def _handle(self, msg):
+        try:
+            if not pmt.is_pair(msg):
+                return
+
+            meta = pmt.car(msg)
+            data = pmt.cdr(msg)
+
+            if not pmt.is_dict(meta):
+                return
+
+            raw = self._payload_bytes(data)
+            seq = self._seq_from_mac(raw)
+
+            if seq is None:
+                print(
+                    f"[CSI-PDU] RX{self.rx_chan} "
+                    "cannot parse MAC seq"
+                )
+                return
+
+            csi_pmt = pmt.dict_ref(
+                meta,
+                self.key_csi,
+                pmt.PMT_NIL,
+            )
+
+            if csi_pmt is pmt.PMT_NIL:
+                print(
+                    f"[CSI-PDU] RX{self.rx_chan} "
+                    f"seq={seq} missing CSI metadata"
+                )
+                return
+
+            H = np.asarray(
+                pmt.c32vector_elements(csi_pmt),
+                dtype=np.complex64,
+            )
+
+            if H.size != 52:
+                print(
+                    f"[CSI-PDU] RX{self.rx_chan} "
+                    f"seq={seq} invalid CSI length={H.size}"
+                )
+                return
+
+            #
+            # Optional pre-beta spatial CSI.
+            #
+            spatial_pmt = pmt.dict_ref(
+                meta,
+                self.key_csi_spatial,
+                pmt.PMT_NIL,
+            )
+
+            H_spatial = None
+
+            if spatial_pmt is not pmt.PMT_NIL:
+                try:
+                    H_spatial = np.asarray(
+                        pmt.c32vector_elements(
+                            spatial_pmt
+                        ),
+                        dtype=np.complex64,
+                    )
+                except Exception:
+                    H_spatial = None
+
+            if (
+                H_spatial is not None
+                and H_spatial.size != 52
+            ):
+                print(
+                    f"[CSI-PDU] RX{self.rx_chan} "
+                    f"seq={seq} invalid spatial CSI "
+                    f"length={H_spatial.size}"
+                )
+                H_spatial = None
+
+            #
+            # Host-side packet reception timestamps.
+            #
+            # monotonic_ns:
+            #   Host callback timing for software/audit diagnostics.
+            #   NOT the primary RF/Doppler time base.
+            #
+            # wall_time_ns:
+            #   Absolute host clock for session audit/alignment only.
+            #
+            host_monotonic_ns = time.monotonic_ns()
+            host_wall_time_ns = time.time_ns()
+
+            self.count += 1
+
+            if self.bin_fh:
+                H.tofile(self.bin_fh)
+                self.bin_fh.flush()
+
+            if (
+                self.spatial_bin_fh
+                and H_spatial is not None
+            ):
+                H_spatial.tofile(
+                    self.spatial_bin_fh
+                )
+                self.spatial_bin_fh.flush()
+
+            rec = {
+                "idx": int(self.count),
+                "seq": int(seq),
+                "rx_chan": int(self.rx_chan),
+                "csi_len": int(H.size),
+                "abs_mean": float(
+                    np.mean(np.abs(H))
+                ),
+                "spatial_csi_present": bool(
+                    H_spatial is not None
+                ),
+                "spatial_csi_len": (
+                    int(H_spatial.size)
+                    if H_spatial is not None
+                    else 0
+                ),
+                "spatial_abs_mean": (
+                    float(
+                        np.mean(
+                            np.abs(H_spatial)
+                        )
+                    )
+                    if H_spatial is not None
+                    else None
+                ),
+                "host_monotonic_ns": int(
+                    host_monotonic_ns
+                ),
+                "host_wall_time_ns": int(
+                    host_wall_time_ns
+                ),
+                "timestamp_source": (
+                    "host_decoded_csi_handler"
+                ),
+            }
+
+            mapping = (
+                ("snr", self.key_snr),
+                ("nominal_frequency", self.key_freq),
+                ("frequency_offset", self.key_foff),
+                ("beta", self.key_beta),
+                ("encoding", self.key_encoding),
+                ("frame_bytes", self.key_frame_bytes),
+                (
+                    "rf_sample_index",
+                    self.key_rf_sample_index,
+                ),
+            )
+
+            for name, key in mapping:
+                val = pmt.dict_ref(
+                    meta,
+                    key,
+                    pmt.PMT_NIL,
+                )
+
+                if val is not pmt.PMT_NIL:
+                    x = self._number(val)
+
+                    if x is not None:
+                        rec[name] = x
+
+            if self.meta_fh:
+                self.meta_fh.write(
+                    json.dumps(rec) + "\n"
+                )
+
+            if (
+                self.count <= 30
+                or self.count % 100 == 0
+            ):
+                print(
+                    f"[CSI-PDU] "
+                    f"RX{self.rx_chan} "
+                    f"idx={self.count} "
+                    f"seq={seq} "
+                    f"mean={rec['abs_mean']:.6f} "
+                    f"spatial="
+                    f"{rec['spatial_csi_present']} "
+                    f"snr={rec.get('snr')}"
+                )
+
+        except Exception as e:
+            print(
+                f"[CSI-PDU] RX{self.rx_chan} "
+                f"error={e}"
+            )
+
+    def stop(self):
+        try:
+            if self.bin_fh:
+                self.bin_fh.close()
+        except Exception:
+            pass
+
+        try:
+            if self.spatial_bin_fh:
+                self.spatial_bin_fh.close()
+        except Exception:
+            pass
+
+        try:
+            if self.meta_fh:
+                self.meta_fh.close()
+        except Exception:
+            pass
+
+        return True
