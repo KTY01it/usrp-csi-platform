@@ -471,45 +471,219 @@ def prepare_capture(
 
 
 
-def capture_session(
-    session_name,
-    mode="step",
-    trajectory="manual_step",
-    duration_s=None,
+
+
+class ScanPoseCancelled(Exception):
+    pass
+
+
+def prompt_float(
+    label,
+    default=None,
+):
+    while True:
+
+        if default is None:
+            text = input(
+                f"{label}: "
+            ).strip()
+        else:
+            text = input(
+                f"{label} [{default}]: "
+            ).strip()
+
+            if text == "":
+                return float(
+                    default
+                )
+
+        if text.lower() in (
+            "q",
+            "quit",
+            "exit",
+        ):
+            raise ScanPoseCancelled()
+
+        try:
+            return float(
+                text
+            )
+
+        except ValueError:
+            print(
+                "Invalid number. Try again."
+            )
+
+
+def prompt_xyz(
+    label,
+):
+    print()
+    print(
+        f"{label} position [m]"
+    )
+
+    x = prompt_float(
+        "  x"
+    )
+
+    y = prompt_float(
+        "  y"
+    )
+
+    z = prompt_float(
+        "  z"
+    )
+
+    return [
+        x,
+        y,
+        z,
+    ]
+
+
+def prompt_orientation(
+    label,
+):
+    print()
+    print(
+        f"{label} orientation [deg]"
+    )
+
+    yaw = prompt_float(
+        "  yaw",
+        0.0,
+    )
+
+    pitch = prompt_float(
+        "  pitch",
+        0.0,
+    )
+
+    roll = prompt_float(
+        "  roll",
+        0.0,
+    )
+
+    return (
+        yaw,
+        pitch,
+        roll,
+    )
+
+
+def register_view_pose_interactive(
+    manager,
+    view_dir,
+):
+    print()
+    print(
+        "=" * 62
+    )
+    print(
+        "REGISTER BISTATIC VIEW POSE"
+    )
+    print(
+        "=" * 62
+    )
+
+    print(
+        "View:",
+        view_dir.name
+    )
+
+    print()
+    print(
+        "Coordinate system: room_local"
+    )
+
+    tx_xyz = prompt_xyz(
+        "TX platform"
+    )
+
+    (
+        tx_yaw,
+        tx_pitch,
+        tx_roll,
+    ) = prompt_orientation(
+        "TX platform"
+    )
+
+    rx_xyz = prompt_xyz(
+        "RX platform"
+    )
+
+    (
+        rx_yaw,
+        rx_pitch,
+        rx_roll,
+    ) = prompt_orientation(
+        "RX platform"
+    )
+
+    manager.set_view_pose(
+        view_dir,
+
+        tx_xyz_m=tx_xyz,
+        rx_xyz_m=rx_xyz,
+
+        tx_yaw_deg=tx_yaw,
+        tx_pitch_deg=tx_pitch,
+        tx_roll_deg=tx_roll,
+
+        rx_yaw_deg=rx_yaw,
+        rx_pitch_deg=rx_pitch,
+        rx_roll_deg=rx_roll,
+    )
+
+    print()
+    print(
+        "Pose registration: PASS"
+    )
+
+    print(
+        "TX xyz [m]:",
+        tx_xyz
+    )
+
+    print(
+        "RX xyz [m]:",
+        rx_xyz
+    )
+
+    return True
+
+
+def capture_view(
+    session_dir,
+    view_dir,
+    duration_s,
     snr_min=10.0,
     dry_run=False,
     remote_tx=True,
     tx_interval_ms=100,
 ):
-    print_header()
-
-    acquisition = load_yaml(
-        CONFIG_FILES["acquisition"]
-    )
-
-    if duration_s is None:
-        duration_s = acquisition[
-            "capture"
-        ][
-            "duration_s"
-        ]
-
-    manager = SessionManager(ROOT)
-
-    session_dir = manager.create_session(
-        session_name,
-        mode=mode,
-        trajectory=trajectory,
-    )
-
-    view_dir = (
+    session_dir = Path(
         session_dir
-        / "views"
-        / "view_000"
-    )
+    ).resolve()
+
+    view_dir = Path(
+        view_dir
+    ).resolve()
+
+    if not view_dir.exists():
+        print(
+            "ERROR: view directory does not exist:"
+        )
+        print(
+            view_dir
+        )
+        return 2
+
+    view_id = view_dir.name
 
     print()
-    print("[CAPTURE SESSION]")
+    print("[CAPTURE VIEW]")
 
     print(
         "Session      :",
@@ -518,12 +692,12 @@ def capture_session(
 
     print(
         "View         :",
-        view_dir
+        view_id
     )
 
     print(
-        "Mode         :",
-        mode
+        "View dir     :",
+        view_dir
     )
 
     print(
@@ -558,9 +732,11 @@ def capture_session(
             )
 
             if not tx.check_connection():
+
                 print(
                     "Remote TX SSH : FAIL"
                 )
+
                 return 6
 
             print(
@@ -570,13 +746,16 @@ def capture_session(
             current = tx.status()
 
             if current["running"]:
+
                 print(
                     "Remote TX     : ALREADY RUNNING"
                 )
+
                 print(
                     "PID           :",
                     current["pid"]
                 )
+
                 return 7
 
             print(
@@ -605,10 +784,12 @@ def capture_session(
         )
 
         if status != 0:
+
             print()
             print(
                 "Capture backend: FAIL"
             )
+
             return status
 
     finally:
@@ -619,6 +800,7 @@ def capture_session(
             print("[REMOTE TX SHUTDOWN]")
 
             try:
+
                 result = tx.stop()
 
                 print(
@@ -636,6 +818,7 @@ def capture_session(
                 )
 
     print()
+
     print(
         "Capture backend:",
         "DRY-RUN PASS"
@@ -644,14 +827,23 @@ def capture_session(
     )
 
     if dry_run:
+
         print(
             "Session:",
             session_dir
         )
+
+        print(
+            "View:",
+            view_id
+        )
+
         return 0
 
     print()
-    print("[VIEW QUALITY CONTROL]")
+    print(
+        "[VIEW QUALITY CONTROL]"
+    )
 
     qc = evaluate_view(
         ROOT,
@@ -665,7 +857,7 @@ def capture_session(
 
     update_session_manifest(
         session_dir,
-        "view_000",
+        view_id,
         qc,
     )
 
@@ -711,16 +903,21 @@ def capture_session(
     print()
 
     if qc["accepted"]:
+
         print(
             "VIEW QUALITY : ACCEPTED"
         )
+
         print(
             "Reason       : accepted"
         )
+
     else:
+
         print(
             "VIEW QUALITY : REJECTED"
         )
+
         print(
             "Reason       :",
             qc["reason"]
@@ -733,8 +930,14 @@ def capture_session(
         session_dir
     )
 
+    print(
+        "View:",
+        view_id
+    )
+
     #
-    # Run validated post-processing only for an accepted view.
+    # Run validated post-processing only
+    # for an accepted view.
     #
     if qc["accepted"]:
 
@@ -743,12 +946,367 @@ def capture_session(
         )
 
     #
-    # Important:
-    # backend succeeded even if scientific QC rejected the view.
-    # Use exit code 3 to distinguish this state.
+    # Backend succeeded even if scientific
+    # QC rejected the view.
     #
     return 0 if qc["accepted"] else 3
 
+
+
+def capture_session(
+    session_name,
+    mode="step",
+    trajectory="manual_step",
+    duration_s=None,
+    snr_min=10.0,
+    dry_run=False,
+    remote_tx=True,
+    tx_interval_ms=100,
+):
+    print_header()
+
+    acquisition = load_yaml(
+        CONFIG_FILES["acquisition"]
+    )
+
+    if duration_s is None:
+
+        duration_s = acquisition[
+            "capture"
+        ][
+            "duration_s"
+        ]
+
+    manager = SessionManager(
+        ROOT
+    )
+
+    session_dir = manager.create_session(
+        session_name,
+        mode=mode,
+        trajectory=trajectory,
+    )
+
+    view_dir = (
+        session_dir
+        / "views"
+        / "view_000"
+    )
+
+    print()
+    print(
+        "[CAPTURE SESSION]"
+    )
+
+    print(
+        "Session      :",
+        session_dir
+    )
+
+    print(
+        "Initial view :",
+        view_dir
+    )
+
+    print(
+        "Mode         :",
+        mode
+    )
+
+    return capture_view(
+        session_dir=session_dir,
+        view_dir=view_dir,
+        duration_s=duration_s,
+        snr_min=snr_min,
+        dry_run=dry_run,
+        remote_tx=remote_tx,
+        tx_interval_ms=tx_interval_ms,
+    )
+
+
+
+def scan_session(
+    session_name,
+    trajectory="manual_step",
+    duration_s=None,
+    snr_min=10.0,
+    dry_run=False,
+    remote_tx=True,
+    tx_interval_ms=100,
+):
+    print_header()
+
+    acquisition = load_yaml(
+        CONFIG_FILES["acquisition"]
+    )
+
+    if duration_s is None:
+
+        duration_s = acquisition[
+            "capture"
+        ][
+            "duration_s"
+        ]
+
+    manager = SessionManager(
+        ROOT
+    )
+
+    session_dir = manager.create_session(
+        session_name,
+        mode="step",
+        trajectory=trajectory,
+    )
+
+    view_dir = (
+        session_dir
+        / "views"
+        / "view_000"
+    )
+
+    print()
+    print(
+        "=" * 62
+    )
+    print(
+        "MULTI-VIEW MANUAL STEP SCAN"
+    )
+    print(
+        "=" * 62
+    )
+
+    print(
+        "Session:",
+        session_dir
+    )
+
+    print(
+        "Trajectory:",
+        trajectory
+    )
+
+    print(
+        "Duration/view:",
+        duration_s,
+        "s"
+    )
+
+    print(
+        "SNR minimum:",
+        snr_min,
+        "dB"
+    )
+
+    print(
+        "TX interval:",
+        tx_interval_ms,
+        "ms"
+    )
+
+    print(
+        "Dry run:",
+        dry_run
+    )
+
+    accepted_views = 0
+    rejected_views = 0
+    dryrun_views = 0
+    view_index = 0
+
+    while True:
+
+        print()
+        print(
+            "#" * 62
+        )
+
+        print(
+            f"VIEW {view_index:03d}"
+        )
+
+        print(
+            "#" * 62
+        )
+
+        try:
+
+            register_view_pose_interactive(
+                manager,
+                view_dir,
+            )
+
+        except ScanPoseCancelled:
+
+            print()
+            print(
+                "Pose entry cancelled."
+            )
+
+            print(
+                "Removing uncaptured prepared view:",
+                view_dir.name,
+            )
+
+            manager.remove_prepared_view(
+                session_dir,
+                view_dir,
+            )
+
+            break
+
+        print()
+        print(
+            "Pose registered."
+        )
+
+        print(
+            "Place both platforms exactly at the "
+            "registered pose before capture."
+        )
+
+        command = input(
+            "Press Enter to capture, "
+            "'q' to finish without capturing this view: "
+        ).strip().lower()
+
+        if command in (
+            "q",
+            "quit",
+            "exit",
+        ):
+
+            print()
+            print(
+                "Current prepared view not captured."
+            )
+
+            break
+
+        status = capture_view(
+            session_dir=session_dir,
+            view_dir=view_dir,
+            duration_s=duration_s,
+            snr_min=snr_min,
+            dry_run=dry_run,
+            remote_tx=remote_tx,
+            tx_interval_ms=tx_interval_ms,
+        )
+
+        if status == 0:
+
+            if dry_run:
+
+                dryrun_views += 1
+
+                print()
+                print(
+                    f"{view_dir.name}: DRY-RUN PASS"
+                )
+
+            else:
+
+                accepted_views += 1
+
+                print()
+                print(
+                    f"{view_dir.name}: PASS"
+                )
+
+        elif status == 3:
+
+            rejected_views += 1
+
+            print()
+            print(
+                f"{view_dir.name}: "
+                "SCIENTIFIC QC REJECTED"
+            )
+
+        else:
+
+            print()
+            print(
+                f"{view_dir.name}: "
+                f"CAPTURE ERROR ({status})"
+            )
+
+            print(
+                "Scan stopped to avoid "
+                "geometry/data misalignment."
+            )
+
+            return status
+
+        print()
+
+        command = input(
+            "Next view? "
+            "[Enter=yes, q=finish]: "
+        ).strip().lower()
+
+        if command in (
+            "q",
+            "quit",
+            "exit",
+        ):
+
+            break
+
+        view_dir = manager.create_next_view(
+            session_dir,
+            state="prepared",
+        )
+
+        view_index += 1
+
+    print()
+    print(
+        "=" * 62
+    )
+
+    print(
+        "SCAN COMPLETE"
+    )
+
+    print(
+        "=" * 62
+    )
+
+    print(
+        "Session:",
+        session_dir
+    )
+
+    print(
+        "Accepted views:",
+        accepted_views
+    )
+
+    print(
+        "Rejected views:",
+        rejected_views
+    )
+
+    print(
+        "Dry-run views:",
+        dryrun_views
+    )
+
+    print(
+        "Registered views remaining:",
+        accepted_views
+        + rejected_views
+        + dryrun_views
+    )
+
+    print()
+    print(
+        "Multi-view reconstruction remains "
+        "conditional on correct manual pose "
+        "registration and future spatial fusion."
+    )
+
+    return 0
 
 
 def run_view_feature_pipeline(
@@ -906,6 +1464,76 @@ def main():
         help="Remote TX packet interval in ms. Default: 100.",
     )
 
+
+    scan_parser = sub.add_parser(
+        "scan",
+        help=(
+            "Run interactive multi-view "
+            "manual-step CSI sensing."
+        ),
+    )
+
+    scan_parser.add_argument(
+        "session_name",
+        help=(
+            "Logical multi-view experiment name, "
+            "e.g. room01."
+        ),
+    )
+
+    scan_parser.add_argument(
+        "--trajectory",
+        default="manual_step",
+        help=(
+            "Trajectory config name. "
+            "Default: manual_step."
+        ),
+    )
+
+    scan_parser.add_argument(
+        "--duration",
+        type=float,
+        default=None,
+        help=(
+            "Capture duration per view in seconds."
+        ),
+    )
+
+    scan_parser.add_argument(
+        "--snr-min",
+        type=float,
+        default=10.0,
+        help=(
+            "Minimum CSI SNR for TDM tensor."
+        ),
+    )
+
+    scan_parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help=(
+            "Exercise multi-view orchestration "
+            "without RF acquisition."
+        ),
+    )
+
+    scan_parser.add_argument(
+        "--no-remote-tx",
+        action="store_true",
+        help=(
+            "Do not control TX remotely."
+        ),
+    )
+
+    scan_parser.add_argument(
+        "--tx-interval-ms",
+        type=int,
+        default=100,
+        help=(
+            "Remote TX packet interval in ms."
+        ),
+    )
+
     args = parser.parse_args()
 
     if args.command == "doctor":
@@ -934,6 +1562,20 @@ def main():
             capture_session(
                 args.session_name,
                 mode=args.mode,
+                trajectory=args.trajectory,
+                duration_s=args.duration,
+                snr_min=args.snr_min,
+                dry_run=args.dry_run,
+                remote_tx=not args.no_remote_tx,
+                tx_interval_ms=args.tx_interval_ms,
+            )
+        )
+
+    if args.command == "scan":
+
+        sys.exit(
+            scan_session(
+                args.session_name,
                 trajectory=args.trajectory,
                 duration_s=args.duration,
                 snr_min=args.snr_min,

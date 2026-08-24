@@ -198,12 +198,26 @@ class SessionManager:
 
             "state": state,
 
-            "pose": {
+            "tx_pose": {
                 "xyz_m": None,
                 "yaw_deg": None,
                 "pitch_deg": None,
                 "roll_deg": None,
                 "measured": False,
+            },
+
+            "rx_pose": {
+                "xyz_m": None,
+                "yaw_deg": None,
+                "pitch_deg": None,
+                "roll_deg": None,
+                "measured": False,
+            },
+
+            "pose_registration": {
+                "method": "manual_known_pose",
+                "coordinate_system": "room_local",
+                "valid_for_spatial_fusion": False,
             },
 
             "capture": {
@@ -268,3 +282,277 @@ class SessionManager:
             )
 
         return view_dir
+
+    def set_view_pose(
+        self,
+        view_dir,
+        tx_xyz_m,
+        rx_xyz_m,
+        tx_yaw_deg=0.0,
+        tx_pitch_deg=0.0,
+        tx_roll_deg=0.0,
+        rx_yaw_deg=0.0,
+        rx_pitch_deg=0.0,
+        rx_roll_deg=0.0,
+    ):
+        view_dir = Path(
+            view_dir
+        ).resolve()
+
+        manifest_file = (
+            view_dir
+            / "view_manifest.json"
+        )
+
+        if not manifest_file.exists():
+            raise FileNotFoundError(
+                manifest_file
+            )
+
+        def validate_xyz(
+            value,
+            name,
+        ):
+            if (
+                not isinstance(
+                    value,
+                    (list, tuple)
+                )
+                or len(value) != 3
+            ):
+                raise ValueError(
+                    f"{name} must contain [x,y,z]"
+                )
+
+            return [
+                float(x)
+                for x in value
+            ]
+
+        tx_xyz = validate_xyz(
+            tx_xyz_m,
+            "tx_xyz_m",
+        )
+
+        rx_xyz = validate_xyz(
+            rx_xyz_m,
+            "rx_xyz_m",
+        )
+
+        with open(
+            manifest_file,
+            "r",
+            encoding="utf-8",
+        ) as f:
+            manifest = json.load(f)
+
+        manifest["tx_pose"] = {
+            "xyz_m": tx_xyz,
+            "yaw_deg": float(
+                tx_yaw_deg
+            ),
+            "pitch_deg": float(
+                tx_pitch_deg
+            ),
+            "roll_deg": float(
+                tx_roll_deg
+            ),
+            "measured": True,
+        }
+
+        manifest["rx_pose"] = {
+            "xyz_m": rx_xyz,
+            "yaw_deg": float(
+                rx_yaw_deg
+            ),
+            "pitch_deg": float(
+                rx_pitch_deg
+            ),
+            "roll_deg": float(
+                rx_roll_deg
+            ),
+            "measured": True,
+        }
+
+        manifest[
+            "pose_registration"
+        ] = {
+            "method":
+                "manual_known_pose",
+
+            "coordinate_system":
+                "room_local",
+
+            "valid_for_spatial_fusion":
+                True,
+        }
+
+        with open(
+            manifest_file,
+            "w",
+            encoding="utf-8",
+        ) as f:
+            json.dump(
+                manifest,
+                f,
+                indent=2,
+                ensure_ascii=False,
+            )
+
+        return manifest
+
+
+    def create_next_view(
+        self,
+        session_dir,
+        state="prepared",
+    ):
+        session_dir = Path(
+            session_dir
+        ).resolve()
+
+        manifest_file = (
+            session_dir
+            / "manifest.json"
+        )
+
+        if not manifest_file.exists():
+            raise FileNotFoundError(
+                manifest_file
+            )
+
+        with open(
+            manifest_file,
+            "r",
+            encoding="utf-8",
+        ) as f:
+            manifest = json.load(f)
+
+        existing = manifest.get(
+            "views",
+            [],
+        )
+
+        indices = []
+
+        for item in existing:
+            view_id = item.get(
+                "view_id",
+                "",
+            )
+
+            if not view_id.startswith(
+                "view_"
+            ):
+                continue
+
+            try:
+                indices.append(
+                    int(
+                        view_id.split(
+                            "_"
+                        )[1]
+                    )
+                )
+            except Exception:
+                continue
+
+        next_index = (
+            max(indices) + 1
+            if indices
+            else 0
+        )
+
+        return self.create_view(
+            session_dir,
+            view_index=next_index,
+            state=state,
+        )
+
+    def remove_prepared_view(
+        self,
+        session_dir,
+        view_dir,
+    ):
+        session_dir = Path(
+            session_dir
+        ).resolve()
+
+        view_dir = Path(
+            view_dir
+        ).resolve()
+
+        manifest_file = (
+            session_dir
+            / "manifest.json"
+        )
+
+        view_manifest_file = (
+            view_dir
+            / "view_manifest.json"
+        )
+
+        if not manifest_file.exists():
+            raise FileNotFoundError(
+                manifest_file
+            )
+
+        if not view_manifest_file.exists():
+            raise FileNotFoundError(
+                view_manifest_file
+            )
+
+        with open(
+            view_manifest_file,
+            "r",
+            encoding="utf-8",
+        ) as f:
+            vm = json.load(f)
+
+        if vm.get("state") != "prepared":
+            raise RuntimeError(
+                "Only an unconsumed prepared view "
+                "may be removed"
+            )
+
+        with open(
+            manifest_file,
+            "r",
+            encoding="utf-8",
+        ) as f:
+            manifest = json.load(f)
+
+        view_id = view_dir.name
+
+        manifest["views"] = [
+            item
+            for item in manifest.get(
+                "views",
+                []
+            )
+            if item.get("view_id") != view_id
+        ]
+
+        manifest[
+            "counters"
+        ][
+            "views_total"
+        ] = len(
+            manifest["views"]
+        )
+
+        shutil.rmtree(
+            view_dir
+        )
+
+        with open(
+            manifest_file,
+            "w",
+            encoding="utf-8",
+        ) as f:
+            json.dump(
+                manifest,
+                f,
+                indent=2,
+                ensure_ascii=False,
+            )
