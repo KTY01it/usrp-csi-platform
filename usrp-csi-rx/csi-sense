@@ -734,11 +734,84 @@ def capture_session(
     )
 
     #
+    # Run validated post-processing only for an accepted view.
+    #
+    if qc["accepted"]:
+
+        run_view_feature_pipeline(
+            view_dir
+        )
+
+    #
     # Important:
     # backend succeeded even if scientific QC rejected the view.
     # Use exit code 3 to distinguish this state.
     #
     return 0 if qc["accepted"] else 3
+
+
+
+def run_view_feature_pipeline(
+    view_dir,
+):
+    runner = (
+        ROOT
+        / "tools"
+        / "run_view_feature_pipeline.py"
+    )
+
+    if not runner.exists():
+
+        print()
+        print(
+            "[FEATURE EXTRACTION]"
+        )
+
+        print(
+            "Feature runner: SKIP"
+        )
+
+        print(
+            "Reason: runner not installed"
+        )
+
+        return None
+
+    print()
+    print(
+        "[FEATURE EXTRACTION]"
+    )
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(runner),
+            str(view_dir),
+        ],
+        cwd=ROOT,
+    )
+
+    if result.returncode == 0:
+
+        print()
+        print(
+            "Feature pipeline: PASS"
+        )
+
+        return True
+
+    print()
+    print(
+        "Feature pipeline: WARNING"
+    )
+
+    print(
+        "RF acquisition remains valid; "
+        "one or more post-processing "
+        "features failed."
+    )
+
+    return False
 
 
 def main():
