@@ -1,0 +1,67 @@
+baseline_type: differential_doppler_static
+
+primary_tx: 0
+
+source_capture:
+  session: aoa_static0_20260824_045724
+  segment_start_cycle: 54
+  segment_end_cycle: 185
+  segment_length: 131
+
+timing:
+  median_dt_s: 0.2004668
+  slow_time_sample_rate_hz: 4.988357174
+  doppler_nyquist_hz: 2.494178587
+  doppler_bin_spacing_hz: 0.0380790624
+
+tx0_static:
+  phase_increment_median_rad: -0.0023807115
+  phase_increment_std_rad: 0.05351045
+  phase_increment_p95_abs_rad: 0.09429673
+  phase_increment_max_abs_rad: 0.13650239
+
+  spectral_peak_candidate_hz: 1.40892531
+  spectral_peak_to_floor_ratio: 5.87182753
+  normalized_spectral_entropy: 0.90397626
+  total_nonzero_spectral_power: 8.45145901
+
+tx1_static:
+  phase_increment_std_rad: 0.13981992
+  phase_increment_p95_abs_rad: 0.29215328
+  normalized_spectral_entropy: 0.92901391
+  total_nonzero_spectral_power: 332.30841281
+
+policy:
+  tx0_role: primary
+  tx1_role: auxiliary_quality_gated
+  physical_velocity_valid: false
+  fixed_motion_threshold_valid: false
+
+notes:
+  - Single static baseline; values are empirical noise-floor references, not universal thresholds.
+  - Nonzero spectral peak in static data is not interpreted as physical motion.
+  - Motion validity requires controlled target-vs-static validation.
+
+high_cadence_validation:
+  packet_interval_ms: 20
+  approximate_tdm_cycle_s: 0.04035
+  approximate_slow_time_sample_rate_hz: 24.8
+  approximate_doppler_nyquist_hz: 12.4
+
+  acquisition_valid: true
+  rf_timing_valid: true
+  controlled_motion_capture_valid: true
+
+  scalar_spectral_motion_separation: false
+  subcarrier_spectral_motion_separation: false
+
+  spectral_excess_static_ratio: 0.2292
+  median_subcarrier_excess_static_ratio: 0.2329
+  p95_subcarrier_excess_static_ratio: 0.3069
+  subcarriers_exceeding_static_ratio_1: 0
+
+  physical_doppler_frequency_valid: false
+  micro_doppler_valid: false
+  physical_velocity_valid: false
+
+  conclusion: temporal_motion_evidence_only
